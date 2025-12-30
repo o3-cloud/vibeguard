@@ -1,0 +1,36 @@
+# Binaries
+/vibeguard
+*.exe
+*.exe~
+*.dll
+*.so
+*.so.*
+*.dylib
+
+# Go build cache
+.cache/
+*.o
+*.a
+*.out
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.iml
+
+# Go coverage
+*.coverprofile
+coverage.txt
+*.cover
+
+# Build output
+dist/
+bin/
+
+# Temporary files
+*.tmp
+*.test

@@ -1,0 +1,18 @@
+name: commit-policy
+version: "1.0"
+description: "Basic policy for evaluating git commits"
+
+rules:
+  - id: rule-commit-message
+    description: "Commits must have a message"
+    target: commit
+    condition: "message.length > 0"
+    severity: error
+    message: "Commit message cannot be empty"
+
+  - id: rule-commit-signed
+    description: "Commits should be signed"
+    target: commit
+    condition: "signed == true"
+    severity: warning
+    message: "Commit is not signed"
