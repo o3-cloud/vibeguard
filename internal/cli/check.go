@@ -40,8 +40,8 @@ func runCheck(cmd *cobra.Command, args []string) error {
 	exec := executor.New("")
 	orch := orchestrator.New(cfg, exec, parallel, failFast, verbose)
 
-	// Create formatter
-	formatter := output.New(os.Stdout, verbose)
+	// Create formatter - use stderr for Claude Code hook visibility
+	formatter := output.New(os.Stderr, verbose)
 
 	// Run checks
 	ctx := context.Background()
@@ -58,9 +58,9 @@ func runCheck(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Format and output results
+	// Format and output results - use stderr for Claude Code hook visibility
 	if jsonOutput {
-		if err := output.FormatJSON(os.Stdout, result); err != nil {
+		if err := output.FormatJSON(os.Stderr, result); err != nil {
 			return err
 		}
 	} else {

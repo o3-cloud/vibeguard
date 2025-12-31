@@ -83,7 +83,7 @@ func TestFormatJSON_WithViolations(t *testing.T) {
 				Extracted:  map[string]string{"coverage": "72"},
 			},
 		},
-		ExitCode: 1,
+		ExitCode: executor.ExitCodeViolation,
 	}
 
 	err := FormatJSON(&buf, result)
@@ -117,8 +117,8 @@ func TestFormatJSON_WithViolations(t *testing.T) {
 	if output.Violations[0].Extracted["coverage"] != "72" {
 		t.Errorf("expected extracted coverage '72', got %s", output.Violations[0].Extracted["coverage"])
 	}
-	if output.ExitCode != 1 {
-		t.Errorf("expected exit code 1, got %d", output.ExitCode)
+	if output.ExitCode != executor.ExitCodeViolation {
+		t.Errorf("expected exit code %d, got %d", executor.ExitCodeViolation, output.ExitCode)
 	}
 }
 

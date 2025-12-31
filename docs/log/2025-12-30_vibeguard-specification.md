@@ -244,8 +244,10 @@ FAIL  coverage (error)
       Tip: Coverage is 72%, need 80%.
 
 $ echo $?
-1
+2
 ```
+
+**Note:** All output is written to **stderr**, not stdout. This ensures output is visible to Claude Code PostToolUse hooks, which hide stdout by default.
 
 #### Verbose Mode
 
@@ -277,7 +279,7 @@ $ vibeguard check --verbose
       "extracted": {"coverage": "72"}
     }
   ],
-  "exit_code": 1
+  "exit_code": 2
 }
 ```
 
@@ -286,11 +288,13 @@ $ vibeguard check --verbose
 | Code | Meaning |
 |------|---------|
 | 0 | All checks passed, or only warning-severity violations |
-| 1 | One or more error-severity violations |
-| 2 | Configuration error |
-| 3 | Check execution error (timeout, command not found) |
+| 2 | One or more error-severity violations |
+| 3 | Configuration error |
+| 4 | Check execution error (timeout, command not found) |
 
 **Note:** Warning-severity violations are reported in output but do not cause a non-zero exit code. This allows CI pipelines to surface warnings without blocking merges.
+
+**Claude Code Hook Compatibility:** Exit code 2 is used for violations (rather than 1) because Claude Code hooks treat exit codes 0 and 1 as non-blocking, while exit codes ≥2 block the tool call. This ensures VibeGuard policy violations prevent commits when used as a git pre-commit hook.
 
 ---
 
@@ -474,8 +478,8 @@ vibeguard/
 ┌─────────────────────────────────────────────────────────────┐
 │ 6. Exit                                                     │
 │    - Code 0: all passed                                     │
-│    - Code 1: violations                                     │
-│    - Code 2/3: errors                                       │
+│    - Code 2: violations                                     │
+│    - Code 3/4: errors                                       │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -564,7 +568,7 @@ VibeGuard v1.0 is complete when:
 
 ---
 
-**Specification Version:** 1.0.2
+**Specification Version:** 1.0.3
 **Status:** Ready for Implementation
 **Date:** 2025-12-30
-**Last Updated:** 2025-12-30
+**Last Updated:** 2025-12-31

@@ -239,7 +239,7 @@ func TestResult_String_Timeout(t *testing.T) {
 		Timedout: true,
 	}
 
-	expected := "test-check: timeout (exit=3, duration=30s)"
+	expected := "test-check: timeout (exit=4, duration=30s)"
 	got := result.String()
 	if got != expected {
 		t.Errorf("expected %q, got %q", expected, got)

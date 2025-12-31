@@ -10,8 +10,14 @@ import (
 	"time"
 )
 
-// ExitCodeTimeout is the exit code used when a command times out.
-const ExitCodeTimeout = 3
+// Exit codes for vibeguard.
+// These are designed for Claude Code hook compatibility where exit codes ≥2 are blocking.
+const (
+	ExitCodeSuccess     = 0 // All checks passed
+	ExitCodeViolation   = 2 // One or more error-severity violations
+	ExitCodeConfigError = 3 // Configuration error
+	ExitCodeTimeout     = 4 // Check execution error (timeout, command not found)
+)
 
 // Result contains the execution result of a check command.
 type Result struct {

@@ -10,6 +10,8 @@ import (
 	"github.com/vibeguard/vibeguard/internal/orchestrator"
 )
 
+// Use exit code constants for consistency
+
 func TestFormatter_QuietMode_NoViolations(t *testing.T) {
 	var buf bytes.Buffer
 	f := New(&buf, false) // quiet mode
@@ -64,7 +66,7 @@ func TestFormatter_QuietMode_WithViolations(t *testing.T) {
 				Suggestion: "Coverage is 72%, need 80%.",
 			},
 		},
-		ExitCode: 1,
+		ExitCode: executor.ExitCodeViolation,
 	}
 
 	f.FormatResult(result)
@@ -149,7 +151,7 @@ func TestFormatter_VerboseMode_WithFailure(t *testing.T) {
 				Suggestion: "Coverage is 72%, need 80%",
 			},
 		},
-		ExitCode: 1,
+		ExitCode: executor.ExitCodeViolation,
 	}
 
 	f.FormatResult(result)

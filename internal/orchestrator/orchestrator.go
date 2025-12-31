@@ -283,7 +283,8 @@ func (o *Orchestrator) Run(ctx context.Context) (*RunResult, error) {
 }
 
 // calculateExitCode determines the exit code based on violations.
-// Exit codes: 0 = success, 1 = error severity violation, 3 = timeout
+// Exit codes: 0 = success, 2 = violation, 4 = timeout
+// Uses exit code 2 for violations (not 1) for Claude Code hook compatibility.
 func (o *Orchestrator) calculateExitCode(violations []*Violation) int {
 	hasTimeout := false
 	hasError := false
@@ -302,9 +303,9 @@ func (o *Orchestrator) calculateExitCode(violations []*Violation) int {
 		return executor.ExitCodeTimeout
 	}
 	if hasError {
-		return 1
+		return executor.ExitCodeViolation
 	}
-	return 0
+	return executor.ExitCodeSuccess
 }
 
 // RunCheck executes a single check by ID.
@@ -322,7 +323,7 @@ func (o *Orchestrator) RunCheck(ctx context.Context, checkID string) (*RunResult
 	if check == nil {
 		return &RunResult{
 			Duration: time.Since(start),
-			ExitCode: 2, // Configuration error
+			ExitCode: executor.ExitCodeConfigError,
 		}, nil
 	}
 
@@ -372,7 +373,7 @@ func (o *Orchestrator) RunCheck(ctx context.Context, checkID string) (*RunResult
 	}
 
 	var violations []*Violation
-	exitCode := 0
+	exitCode := executor.ExitCodeSuccess
 	if !passed {
 		suggestion := check.Suggestion
 		if execResult.Timedout {
@@ -390,7 +391,7 @@ func (o *Orchestrator) RunCheck(ctx context.Context, checkID string) (*RunResult
 		if execResult.Timedout {
 			exitCode = executor.ExitCodeTimeout
 		} else if check.Severity == config.SeverityError {
-			exitCode = 1
+			exitCode = executor.ExitCodeViolation
 		}
 	}
 
