@@ -44,15 +44,11 @@ func InterpolateWithExtracted(templateStr string, vars map[string]string, extrac
 
 	// Merge extracted values first, then config vars (so vars take precedence)
 	data := make(map[string]string)
-	if extracted != nil {
-		for key, value := range extracted {
-			data[key] = value
-		}
+	for key, value := range extracted {
+		data[key] = value
 	}
-	if vars != nil {
-		for key, value := range vars {
-			data[key] = value
-		}
+	for key, value := range vars {
+		data[key] = value
 	}
 
 	// Parse and execute the template

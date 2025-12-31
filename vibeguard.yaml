@@ -8,35 +8,39 @@ checks:
     run: go vet {{.go_packages}}
     severity: error
     suggestion: "Run 'go vet ./...' and fix reported issues"
-    timeout: 60s
+    timeout: 5s
 
   - id: fmt
     run: test -z "$(gofmt -l .)"
     severity: error
     suggestion: "Run 'gofmt -w .' to format code"
-    timeout: 30s
+    timeout: 5s
 
   - id: lint
     run: golangci-lint run {{.go_packages}}
     severity: warning
     suggestion: "Install golangci-lint and run 'golangci-lint run' to fix reported issues"
-    timeout: 120s
+    timeout: 5s
+
+  - id: test
+    run: go test {{.go_packages}}
+    severity: warning
+    suggestion: "Run 'go test ./...' to ensure all tests pass"
+    timeout: 5s
 
   - id: test-coverage
-    run: |
-      go test -race -coverprofile=coverage.out ./... && \
-      coverage=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | tr -d '%') && \
-      echo "Total coverage: ${coverage}%" && \
-      awk "BEGIN {exit ($coverage < 80)}"
-    severity: error
-    suggestion: "Coverage is below 80%. Add tests to improve coverage."
-    timeout: 300s
+    run: go test ./... -coverprofile cover.out & go tool cover -func cover.out
+    grok:
+      - total:.*\(statements\)\s+%{NUMBER:coverage}%
+    assert: "coverage >= 80"
+    suggestion: "Coverage is below 80%"
+    timeout: 5s
 
   - id: build
     run: go build {{.go_packages}}
     severity: error
     suggestion: "Run 'go build ./...' and fix compilation errors"
-    timeout: 60s
+    timeout: 5s
     requires:
       - vet
 

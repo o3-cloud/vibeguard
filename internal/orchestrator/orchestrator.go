@@ -75,10 +75,12 @@ func (o *Orchestrator) Run(ctx context.Context) (*RunResult, error) {
 		return nil, err
 	}
 
-	// Build lookup map for checks by ID
+	// Build lookup maps for checks by ID and index by ID
 	checkByID := make(map[string]*config.Check)
+	checkIndexByID := make(map[string]int)
 	for i := range o.config.Checks {
 		checkByID[o.config.Checks[i].ID] = &o.config.Checks[i]
+		checkIndexByID[o.config.Checks[i].ID] = i
 	}
 
 	results := make([]*CheckResult, 0, len(o.config.Checks))
@@ -117,6 +119,7 @@ func (o *Orchestrator) Run(ctx context.Context) (*RunResult, error) {
 		for i, checkID := range level {
 			i, checkID := i, checkID // capture for goroutine
 			check := checkByID[checkID]
+			checkIndex := checkIndexByID[checkID]
 
 			g.Go(func() error {
 				// Acquire semaphore
@@ -193,11 +196,27 @@ func (o *Orchestrator) Run(ctx context.Context) (*RunResult, error) {
 				if len(check.Grok) > 0 {
 					matcher, matcherErr := grok.New(check.Grok)
 					if matcherErr != nil {
-						return matcherErr
+						// Wrap grok error with check context
+						lineNum := o.config.FindCheckNodeLine(check.ID, checkIndex)
+						return &config.ExecutionError{
+							Message:   "failed to compile grok pattern",
+							Cause:     matcherErr,
+							CheckID:   check.ID,
+							LineNum:   lineNum,
+							ErrorType: "grok",
+						}
 					}
 					extracted, matcherErr = matcher.Match(execResult.Combined)
 					if matcherErr != nil {
-						return matcherErr
+						// Wrap grok error with check context
+						lineNum := o.config.FindCheckNodeLine(check.ID, checkIndex)
+						return &config.ExecutionError{
+							Message:   "failed to parse grok pattern",
+							Cause:     matcherErr,
+							CheckID:   check.ID,
+							LineNum:   lineNum,
+							ErrorType: "grok",
+						}
 					}
 				}
 
@@ -207,7 +226,15 @@ func (o *Orchestrator) Run(ctx context.Context) (*RunResult, error) {
 					evaluator := assert.New()
 					assertPassed, assertErr := evaluator.Eval(check.Assert, extracted)
 					if assertErr != nil {
-						return assertErr
+						// Wrap assert error with check context
+						lineNum := o.config.FindCheckNodeLine(check.ID, checkIndex)
+						return &config.ExecutionError{
+							Message:   "failed to evaluate assertion",
+							Cause:     assertErr,
+							CheckID:   check.ID,
+							LineNum:   lineNum,
+							ErrorType: "assert",
+						}
 					}
 					passed = assertPassed
 				}
@@ -312,11 +339,13 @@ func (o *Orchestrator) calculateExitCode(violations []*Violation) int {
 func (o *Orchestrator) RunCheck(ctx context.Context, checkID string) (*RunResult, error) {
 	start := time.Now()
 
-	// Find the check
+	// Find the check and its index
 	var check *config.Check
+	var checkIndex int
 	for i := range o.config.Checks {
 		if o.config.Checks[i].ID == checkID {
 			check = &o.config.Checks[i]
+			checkIndex = i
 			break
 		}
 	}
@@ -346,11 +375,27 @@ func (o *Orchestrator) RunCheck(ctx context.Context, checkID string) (*RunResult
 	if len(check.Grok) > 0 {
 		matcher, matcherErr := grok.New(check.Grok)
 		if matcherErr != nil {
-			return nil, matcherErr
+			// Wrap grok error with check context
+			lineNum := o.config.FindCheckNodeLine(check.ID, checkIndex)
+			return nil, &config.ExecutionError{
+				Message:   "failed to compile grok pattern",
+				Cause:     matcherErr,
+				CheckID:   check.ID,
+				LineNum:   lineNum,
+				ErrorType: "grok",
+			}
 		}
 		extracted, matcherErr = matcher.Match(execResult.Combined)
 		if matcherErr != nil {
-			return nil, matcherErr
+			// Wrap grok error with check context
+			lineNum := o.config.FindCheckNodeLine(check.ID, checkIndex)
+			return nil, &config.ExecutionError{
+				Message:   "failed to parse grok pattern",
+				Cause:     matcherErr,
+				CheckID:   check.ID,
+				LineNum:   lineNum,
+				ErrorType: "grok",
+			}
 		}
 	}
 
@@ -360,7 +405,15 @@ func (o *Orchestrator) RunCheck(ctx context.Context, checkID string) (*RunResult
 		evaluator := assert.New()
 		assertPassed, assertErr := evaluator.Eval(check.Assert, extracted)
 		if assertErr != nil {
-			return nil, assertErr
+			// Wrap assert error with check context
+			lineNum := o.config.FindCheckNodeLine(check.ID, checkIndex)
+			return nil, &config.ExecutionError{
+				Message:   "failed to evaluate assertion",
+				Cause:     assertErr,
+				CheckID:   check.ID,
+				LineNum:   lineNum,
+				ErrorType: "assert",
+			}
 		}
 		passed = assertPassed
 	}

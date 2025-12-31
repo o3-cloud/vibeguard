@@ -40,6 +40,39 @@ func IsConfigError(err error) bool {
 	return errors.As(err, &configErr)
 }
 
+// ExecutionError represents an error that occurred during check execution with context.
+// This is used for errors in grok patterns and assertions to provide file/line context.
+type ExecutionError struct {
+	Message   string
+	Cause     error
+	CheckID   string // ID of the check that failed
+	LineNum   int    // Line number in the config file (0 if not available)
+	ErrorType string // "grok" or "assert" to distinguish error type
+}
+
+func (e *ExecutionError) Error() string {
+	var msg string
+	if e.Cause != nil {
+		msg = fmt.Sprintf("%s in check %q: %v", e.Message, e.CheckID, e.Cause)
+	} else {
+		msg = fmt.Sprintf("%s in check %q", e.Message, e.CheckID)
+	}
+	if e.LineNum > 0 {
+		msg = fmt.Sprintf("%s (line %d)", msg, e.LineNum)
+	}
+	return msg
+}
+
+func (e *ExecutionError) Unwrap() error {
+	return e.Cause
+}
+
+// IsExecutionError returns true if the given error is an execution error.
+func IsExecutionError(err error) bool {
+	var execErr *ExecutionError
+	return errors.As(err, &execErr)
+}
+
 // Load reads and parses a VibeGuard configuration file.
 // If path is empty, it searches for config files in the default locations.
 // Returns a ConfigError for any configuration-related errors (exit code 2).
@@ -129,13 +162,13 @@ func (c *Config) Validate() error {
 		if check.ID == "" {
 			return &ConfigError{
 				Message: fmt.Sprintf("check at index %d has no id", i),
-				LineNum: c.findCheckNodeLine("", i),
+				LineNum: c.FindCheckNodeLine("", i),
 			}
 		}
 		if checkIDs[check.ID] {
 			return &ConfigError{
 				Message: fmt.Sprintf("duplicate check id: %s", check.ID),
-				LineNum: c.findCheckNodeLine(check.ID, i),
+				LineNum: c.FindCheckNodeLine(check.ID, i),
 			}
 		}
 		checkIDs[check.ID] = true
@@ -143,7 +176,7 @@ func (c *Config) Validate() error {
 		if check.Run == "" {
 			return &ConfigError{
 				Message: fmt.Sprintf("check %q has no run command", check.ID),
-				LineNum: c.findCheckNodeLine(check.ID, i),
+				LineNum: c.FindCheckNodeLine(check.ID, i),
 			}
 		}
 
@@ -151,7 +184,7 @@ func (c *Config) Validate() error {
 		if check.Severity != SeverityError && check.Severity != SeverityWarning {
 			return &ConfigError{
 				Message: fmt.Sprintf("check %q has invalid severity: %s", check.ID, check.Severity),
-				LineNum: c.findCheckNodeLine(check.ID, i),
+				LineNum: c.FindCheckNodeLine(check.ID, i),
 			}
 		}
 
@@ -161,7 +194,7 @@ func (c *Config) Validate() error {
 			if reqID == check.ID {
 				return &ConfigError{
 					Message: fmt.Sprintf("check %q cannot require itself", check.ID),
-					LineNum: c.findCheckNodeLine(check.ID, i),
+					LineNum: c.FindCheckNodeLine(check.ID, i),
 				}
 			}
 
@@ -177,7 +210,7 @@ func (c *Config) Validate() error {
 				if !found {
 					return &ConfigError{
 						Message: fmt.Sprintf("check %q requires unknown check: %s", check.ID, reqID),
-						LineNum: c.findCheckNodeLine(check.ID, i),
+						LineNum: c.FindCheckNodeLine(check.ID, i),
 					}
 				}
 			}
@@ -228,7 +261,7 @@ func (c *Config) validateNoCycles() error {
 			}
 			cyclePath := append(path[cycleStart:], id)
 			// Get line number of the first check in the cycle
-			lineNum := c.findCheckNodeLine(cyclePath[0], idToIndex[cyclePath[0]])
+			lineNum := c.FindCheckNodeLine(cyclePath[0], idToIndex[cyclePath[0]])
 			return &ConfigError{
 				Message: fmt.Sprintf("cyclic dependency detected: %s", formatCycle(cyclePath)),
 				LineNum: lineNum,
@@ -273,8 +306,8 @@ func formatCycle(path []string) string {
 	return result
 }
 
-// findCheckNodeLine returns the line number of a check in the YAML, or 0 if not found.
-func (c *Config) findCheckNodeLine(checkID string, checkIndex int) int {
+// FindCheckNodeLine returns the line number of a check in the YAML, or 0 if not found.
+func (c *Config) FindCheckNodeLine(checkID string, checkIndex int) int {
 	root, ok := c.yamlRoot.(*yaml.Node)
 	if !ok || root == nil {
 		return 0

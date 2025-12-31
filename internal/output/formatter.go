@@ -41,7 +41,7 @@ func (f *Formatter) formatQuiet(result *orchestrator.RunResult) {
 		f.formatViolation(v)
 	}
 	if result.FailFastTriggered {
-		fmt.Fprintf(f.out, "Execution stopped early due to --fail-fast\n")
+		_, _ = fmt.Fprintf(f.out, "Execution stopped early due to --fail-fast\n")
 	}
 }
 
@@ -49,12 +49,12 @@ func (f *Formatter) formatQuiet(result *orchestrator.RunResult) {
 func (f *Formatter) formatVerbose(result *orchestrator.RunResult) {
 	for _, r := range result.Results {
 		if r.Passed {
-			fmt.Fprintf(f.out, "✓ %-15s passed (%.1fs)\n",
+			_, _ = fmt.Fprintf(f.out, "✓ %-15s passed (%.1fs)\n",
 				r.Check.ID, r.Execution.Duration.Seconds())
 		} else if r.Execution.Cancelled {
-			fmt.Fprintf(f.out, "⊘ %-15s cancelled\n", r.Check.ID)
+			_, _ = fmt.Fprintf(f.out, "⊘ %-15s cancelled\n", r.Check.ID)
 		} else {
-			fmt.Fprintf(f.out, "✗ %-15s FAIL (%.1fs)\n",
+			_, _ = fmt.Fprintf(f.out, "✗ %-15s FAIL (%.1fs)\n",
 				r.Check.ID, r.Execution.Duration.Seconds())
 			// Show suggestion if present
 			if r.Check.Suggestion != "" {
@@ -63,28 +63,28 @@ func (f *Formatter) formatVerbose(result *orchestrator.RunResult) {
 					nil,
 					r.Extracted,
 				)
-				fmt.Fprintf(f.out, "  %s\n", suggestion)
+				_, _ = fmt.Fprintf(f.out, "  %s\n", suggestion)
 			}
 		}
 	}
 	if result.FailFastTriggered {
-		fmt.Fprintf(f.out, "\nExecution stopped early due to --fail-fast\n")
+		_, _ = fmt.Fprintf(f.out, "\nExecution stopped early due to --fail-fast\n")
 	}
 }
 
 // formatViolation outputs a single violation.
 func (f *Formatter) formatViolation(v *orchestrator.Violation) {
-	fmt.Fprintf(f.out, "FAIL  %s (%s)\n", v.CheckID, v.Severity)
-	fmt.Fprintf(f.out, "      > %s\n", truncateCommand(v.Command))
+	_, _ = fmt.Fprintf(f.out, "FAIL  %s (%s)\n", v.CheckID, v.Severity)
+	_, _ = fmt.Fprintf(f.out, "      > %s\n", truncateCommand(v.Command))
 	if v.Suggestion != "" {
 		suggestion := config.InterpolateWithExtracted(
 			v.Suggestion,
 			nil,
 			v.Extracted,
 		)
-		fmt.Fprintf(f.out, "\n      Tip: %s\n", suggestion)
+		_, _ = fmt.Fprintf(f.out, "\n      Tip: %s\n", suggestion)
 	}
-	fmt.Fprintln(f.out)
+	_, _ = fmt.Fprintln(f.out)
 }
 
 // truncateCommand shortens long commands for display.
