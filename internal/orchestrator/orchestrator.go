@@ -4,7 +4,10 @@ package orchestrator
 
 import (
 	"context"
+	"sync"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/vibeguard/vibeguard/internal/config"
 	"github.com/vibeguard/vibeguard/internal/executor"
@@ -80,97 +83,153 @@ func (o *Orchestrator) Run(ctx context.Context) (*RunResult, error) {
 	// Track which checks have passed (for dependency validation)
 	passedChecks := make(map[string]bool)
 
+	// Mutex for thread-safe access to shared state
+	var mu sync.Mutex
+	// Flag to signal fail-fast termination
+	failFastTriggered := false
+
 	// Execute checks level by level (topological order)
-	// Within each level, checks can be run in parallel (future: vibeguard-v3m.3)
-	// For now, execute sequentially within each level
+	// Within each level, checks run in parallel (limited by maxParallel)
 	for _, level := range graph.Levels() {
-		for _, checkID := range level {
+		// Check if fail-fast was triggered in a previous level
+		if failFastTriggered {
+			break
+		}
+
+		// Create results slice for this level to maintain order within level
+		levelResults := make([]*CheckResult, len(level))
+		levelViolations := make([]*Violation, 0)
+
+		// Use errgroup for parallel execution with context cancellation
+		g, gctx := errgroup.WithContext(ctx)
+
+		// Semaphore to limit concurrency
+		sem := make(chan struct{}, o.maxParallel)
+
+		for i, checkID := range level {
+			i, checkID := i, checkID // capture for goroutine
 			check := checkByID[checkID]
 
-			// Verify all dependencies passed (fail-fast may have stopped a dependency)
-			allDepsPassed := true
-			for _, depID := range check.Requires {
-				if !passedChecks[depID] {
-					allDepsPassed = false
-					break
+			g.Go(func() error {
+				// Acquire semaphore
+				select {
+				case sem <- struct{}{}:
+				case <-gctx.Done():
+					return gctx.Err()
 				}
-			}
+				defer func() { <-sem }()
 
-			// Skip this check if a required dependency failed
-			if !allDepsPassed {
+				// Check if fail-fast was triggered by another goroutine
+				mu.Lock()
+				if failFastTriggered {
+					mu.Unlock()
+					return nil
+				}
+				// Verify all dependencies passed
+				allDepsPassed := true
+				for _, depID := range check.Requires {
+					if !passedChecks[depID] {
+						allDepsPassed = false
+						break
+					}
+				}
+				mu.Unlock()
+
+				// Skip this check if a required dependency failed
+				if !allDepsPassed {
+					result := &CheckResult{
+						Check:  check,
+						Passed: false,
+						Execution: &executor.Result{
+							CheckID:  checkID,
+							ExitCode: -1,
+							Success:  false,
+						},
+						Extracted: make(map[string]string),
+					}
+
+					violation := &Violation{
+						CheckID:    check.ID,
+						Severity:   check.Severity,
+						Command:    check.Run,
+						Suggestion: "Skipped: required dependency failed",
+						Extracted:  result.Extracted,
+					}
+
+					mu.Lock()
+					levelResults[i] = result
+					levelViolations = append(levelViolations, violation)
+					mu.Unlock()
+					return nil
+				}
+
+				// Apply timeout
+				checkCtx := gctx
+				var cancel context.CancelFunc
+				if check.Timeout > 0 {
+					checkCtx, cancel = context.WithTimeout(gctx, check.Timeout.AsDuration())
+				}
+
+				// Execute the check
+				execResult, execErr := o.executor.Execute(checkCtx, check.ID, check.Run)
+				if cancel != nil {
+					cancel()
+				}
+				if execErr != nil {
+					// Execution error (not just non-zero exit)
+					return execErr
+				}
+
+				// For Phase 1, pass/fail is based on exit code only
+				passed := execResult.Success
+
 				result := &CheckResult{
-					Check:  check,
-					Passed: false,
-					Execution: &executor.Result{
-						CheckID:  checkID,
-						ExitCode: -1,
-						Success:  false,
-					},
+					Check:     check,
+					Execution: execResult,
+					Passed:    passed,
 					Extracted: make(map[string]string),
 				}
-				results = append(results, result)
 
-				violation := &Violation{
-					CheckID:    check.ID,
-					Severity:   check.Severity,
-					Command:    check.Run,
-					Suggestion: "Skipped: required dependency failed",
-					Extracted:  result.Extracted,
+				mu.Lock()
+				levelResults[i] = result
+				passedChecks[checkID] = passed
+
+				if !passed {
+					violation := &Violation{
+						CheckID:    check.ID,
+						Severity:   check.Severity,
+						Command:    check.Run,
+						Suggestion: check.Suggestion,
+						Extracted:  result.Extracted,
+					}
+					levelViolations = append(levelViolations, violation)
+
+					if o.failFast && check.Severity == config.SeverityError {
+						failFastTriggered = true
+					}
 				}
-				violations = append(violations, violation)
-				continue
-			}
+				mu.Unlock()
 
-			// Apply timeout
-			checkCtx := ctx
-			var cancel context.CancelFunc
-			if check.Timeout > 0 {
-				checkCtx, cancel = context.WithTimeout(ctx, check.Timeout.AsDuration())
-			}
+				return nil
+			})
+		}
 
-			// Execute the check
-			execResult, execErr := o.executor.Execute(checkCtx, check.ID, check.Run)
-			if cancel != nil {
-				cancel()
-			}
-			if execErr != nil {
-				// Execution error (not just non-zero exit)
-				return nil, execErr
-			}
+		// Wait for all goroutines in this level to complete
+		if err := g.Wait(); err != nil {
+			return nil, err
+		}
 
-			// For Phase 1, pass/fail is based on exit code only
-			// Grok/assert will be added in Phase 2
-			passed := execResult.Success
-			passedChecks[checkID] = passed
-
-			result := &CheckResult{
-				Check:     check,
-				Execution: execResult,
-				Passed:    passed,
-				Extracted: make(map[string]string),
+		// Append level results in order
+		for _, r := range levelResults {
+			if r != nil {
+				results = append(results, r)
 			}
-			results = append(results, result)
+		}
+		violations = append(violations, levelViolations...)
 
-			if !passed {
-				violation := &Violation{
-					CheckID:    check.ID,
-					Severity:   check.Severity,
-					Command:    check.Run,
-					Suggestion: check.Suggestion,
-					Extracted:  result.Extracted,
-				}
-				violations = append(violations, violation)
-
-				if o.failFast {
-					// Return early, remaining checks won't be executed
-					return &RunResult{
-						Results:    results,
-						Violations: violations,
-						Duration:   time.Since(start),
-						ExitCode:   o.calculateExitCode(violations),
-					}, nil
-				}
-			}
+		// If fail-fast was triggered, stop processing further levels
+		if failFastTriggered {
+			break
 		}
 	}
 

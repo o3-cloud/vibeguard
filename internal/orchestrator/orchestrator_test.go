@@ -5,6 +5,7 @@ package orchestrator
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/vibeguard/vibeguard/internal/config"
 	"github.com/vibeguard/vibeguard/internal/executor"
@@ -191,23 +192,27 @@ func TestRun_MultipleChecks_ErrorFailure_ExitCodeOne(t *testing.T) {
 }
 
 func TestRun_FailFast_StopsOnFirstFailure(t *testing.T) {
+	// With parallel execution at the same level, fail-fast stops after the level completes.
+	// Use dependencies to create multiple levels to test fail-fast stopping at level boundaries.
 	cfg := &config.Config{
 		Version: "1",
 		Checks: []config.Check{
 			{
 				ID:       "check1",
-				Run:      "exit 0",
+				Run:      "exit 1", // Fails
 				Severity: config.SeverityError,
 			},
 			{
 				ID:       "check2",
-				Run:      "exit 1",
+				Run:      "exit 0",
 				Severity: config.SeverityError,
+				Requires: []string{"check1"},
 			},
 			{
 				ID:       "check3",
 				Run:      "exit 0",
 				Severity: config.SeverityError,
+				Requires: []string{"check1"},
 			},
 		},
 	}
@@ -220,9 +225,14 @@ func TestRun_FailFast_StopsOnFirstFailure(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// With fail-fast, should stop after check2 fails
-	if len(result.Results) != 2 {
-		t.Errorf("expected 2 results (fail-fast), got %d", len(result.Results))
+	// With fail-fast, should stop after first level (check1 fails)
+	// check2 and check3 are in level 1 and should not run
+	if len(result.Results) != 1 {
+		t.Errorf("expected 1 result (fail-fast stops at level boundary), got %d", len(result.Results))
+	}
+
+	if result.ExitCode != 1 {
+		t.Errorf("expected exit code 1, got %d", result.ExitCode)
 	}
 }
 
@@ -867,5 +877,210 @@ func TestRun_DependencyChain_MiddleFails_SkipsDownstream(t *testing.T) {
 	// c and d should be skipped
 	if skipped != 2 {
 		t.Errorf("expected 2 skipped checks, got %d", skipped)
+	}
+}
+
+// Tests for parallel execution (vibeguard-v3m.3)
+
+func TestRun_ParallelExecution_SameLevelRunsConcurrently(t *testing.T) {
+	// Create checks that would take too long if run sequentially
+	// but complete quickly when run in parallel
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{ID: "a", Run: "sleep 0.1", Severity: config.SeverityError},
+			{ID: "b", Run: "sleep 0.1", Severity: config.SeverityError},
+			{ID: "c", Run: "sleep 0.1", Severity: config.SeverityError},
+			{ID: "d", Run: "sleep 0.1", Severity: config.SeverityError},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 4, false, false) // maxParallel = 4
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// All checks should complete
+	if len(result.Results) != 4 {
+		t.Fatalf("expected 4 results, got %d", len(result.Results))
+	}
+
+	// With 4 checks sleeping 0.1s each and maxParallel=4,
+	// total time should be ~0.1s (parallel), not ~0.4s (sequential)
+	// Allow some margin for test execution overhead
+	if result.Duration > 300*time.Millisecond {
+		t.Errorf("expected parallel execution to complete quickly, took %v", result.Duration)
+	}
+}
+
+func TestRun_ParallelExecution_RespectsMaxParallel(t *testing.T) {
+	// With maxParallel=2, running 4 checks that each sleep 0.1s
+	// should take ~0.2s (2 batches of 2), not ~0.1s (all 4 at once)
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{ID: "a", Run: "sleep 0.1", Severity: config.SeverityError},
+			{ID: "b", Run: "sleep 0.1", Severity: config.SeverityError},
+			{ID: "c", Run: "sleep 0.1", Severity: config.SeverityError},
+			{ID: "d", Run: "sleep 0.1", Severity: config.SeverityError},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 2, false, false) // maxParallel = 2
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(result.Results) != 4 {
+		t.Fatalf("expected 4 results, got %d", len(result.Results))
+	}
+
+	// With maxParallel=2, should take at least 0.2s (two batches)
+	// but less than 0.4s (which would be sequential)
+	if result.Duration < 150*time.Millisecond {
+		t.Errorf("expected maxParallel to limit concurrency, completed in %v", result.Duration)
+	}
+	if result.Duration > 500*time.Millisecond {
+		t.Errorf("execution took too long: %v", result.Duration)
+	}
+}
+
+func TestRun_ParallelExecution_LevelsRunSequentially(t *testing.T) {
+	// Checks at different levels should run sequentially (level by level)
+	// Level 0: a (0.1s)
+	// Level 1: b, c (0.1s each, parallel)
+	// Total should be ~0.2s (0.1s + 0.1s)
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{ID: "a", Run: "sleep 0.1", Severity: config.SeverityError},
+			{ID: "b", Run: "sleep 0.1", Severity: config.SeverityError, Requires: []string{"a"}},
+			{ID: "c", Run: "sleep 0.1", Severity: config.SeverityError, Requires: []string{"a"}},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 4, false, false)
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(result.Results) != 3 {
+		t.Fatalf("expected 3 results, got %d", len(result.Results))
+	}
+
+	// Should take at least 0.2s (two levels)
+	if result.Duration < 150*time.Millisecond {
+		t.Errorf("expected level-by-level execution, completed too quickly: %v", result.Duration)
+	}
+}
+
+func TestRun_ParallelExecution_FailFastWithinLevel(t *testing.T) {
+	// When fail-fast is enabled and a check fails within a level,
+	// other checks in the same level may or may not complete (race condition),
+	// but subsequent levels should not run
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{ID: "a", Run: "exit 0", Severity: config.SeverityError},
+			{ID: "b", Run: "exit 1", Severity: config.SeverityError}, // Fails (same level as a)
+			{ID: "c", Run: "echo should-not-run", Severity: config.SeverityError, Requires: []string{"a", "b"}},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 4, true, false) // failFast = true
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Level 0 (a, b) should complete, level 1 (c) should not run
+	// So we expect exactly 2 results
+	if len(result.Results) != 2 {
+		t.Errorf("expected 2 results (level 0 only), got %d", len(result.Results))
+	}
+
+	// Verify c didn't run
+	for _, r := range result.Results {
+		if r.Check.ID == "c" {
+			t.Error("check 'c' should not have run due to fail-fast")
+		}
+	}
+}
+
+func TestRun_ParallelExecution_AllFailuresRecorded(t *testing.T) {
+	// When multiple checks fail within the same level (without fail-fast),
+	// all failures should be recorded
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{ID: "a", Run: "exit 1", Severity: config.SeverityError},
+			{ID: "b", Run: "exit 2", Severity: config.SeverityError},
+			{ID: "c", Run: "exit 3", Severity: config.SeverityWarning},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 4, false, false) // failFast = false
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(result.Results) != 3 {
+		t.Fatalf("expected 3 results, got %d", len(result.Results))
+	}
+
+	// All 3 should be violations
+	if len(result.Violations) != 3 {
+		t.Errorf("expected 3 violations, got %d", len(result.Violations))
+	}
+
+	// Exit code should be 1 (error severity failures)
+	if result.ExitCode != 1 {
+		t.Errorf("expected exit code 1, got %d", result.ExitCode)
+	}
+}
+
+func TestRun_ParallelExecution_OrderPreservedWithinLevel(t *testing.T) {
+	// Results within a level should maintain the original check order
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{ID: "a", Run: "echo a", Severity: config.SeverityError},
+			{ID: "b", Run: "echo b", Severity: config.SeverityError},
+			{ID: "c", Run: "echo c", Severity: config.SeverityError},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 4, false, false)
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(result.Results) != 3 {
+		t.Fatalf("expected 3 results, got %d", len(result.Results))
+	}
+
+	// Order should be preserved: a, b, c
+	expected := []string{"a", "b", "c"}
+	for i, exp := range expected {
+		if result.Results[i].Check.ID != exp {
+			t.Errorf("expected result %d to be %q, got %q", i, exp, result.Results[i].Check.ID)
+		}
 	}
 }
