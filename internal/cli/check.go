@@ -60,7 +60,9 @@ func runCheck(cmd *cobra.Command, args []string) error {
 
 	// Format and output results
 	if jsonOutput {
-		output.FormatJSON(os.Stdout, result)
+		if err := output.FormatJSON(os.Stdout, result); err != nil {
+			return err
+		}
 	} else {
 		formatter.FormatResult(result)
 	}

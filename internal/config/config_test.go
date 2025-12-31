@@ -677,7 +677,9 @@ func TestFindConfigFile(t *testing.T) {
 	if err := os.Chdir(dir); err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chdir(oldWd)
+	defer func() {
+		_ = os.Chdir(oldWd)
+	}()
 
 	// No config file initially
 	_, err := findConfigFile()
@@ -713,7 +715,9 @@ func TestFindConfigFile_Priority(t *testing.T) {
 	if err := os.Chdir(dir); err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chdir(oldWd)
+	defer func() {
+		_ = os.Chdir(oldWd)
+	}()
 
 	content := `
 version: "1"

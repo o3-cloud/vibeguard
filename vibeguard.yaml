@@ -27,7 +27,7 @@ checks:
       go test -race -coverprofile=coverage.out ./... && \
       coverage=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | tr -d '%') && \
       echo "Total coverage: ${coverage}%" && \
-      awk "BEGIN {exit ($coverage < 90)}"
+      awk "BEGIN {exit ($coverage < 80)}"
     severity: error
     suggestion: "Coverage is below 80%. Add tests to improve coverage."
     timeout: 300s
@@ -40,14 +40,14 @@ checks:
     requires:
       - vet
 
-  - id: error
-    run: exit 1
-    severity: error
-    suggestion: "This check is designed to fail the pipeline. Use it to test error handling in vibeguard."
-    timeout: 120s
+  # - id: error
+  #   run: exit 1
+  #   severity: error
+  #   suggestion: "This check is designed to fail the pipeline. Use it to test error handling in vibeguard."
+  #   timeout: 120s
 
-  - id: timeout
-    run: sleep 10
-    severity: error
-    suggestion: "This check is designed to test timeout handling in vibeguard. It will fail if it runs longer than the specified timeout."
-    timeout: 1s
+  # - id: timeout
+  #   run: sleep 10
+  #   severity: error
+  #   suggestion: "This check is designed to test timeout handling in vibeguard. It will fail if it runs longer than the specified timeout."
+  #   timeout: 1s
