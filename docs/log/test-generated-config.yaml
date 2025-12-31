@@ -1,0 +1,44 @@
+version: "1"
+
+vars:
+  go_packages: "./..."
+
+checks:
+  - id: build
+    run: go build {{.go_packages}}
+    severity: error
+    suggestion: "Fix compilation errors before committing"
+    timeout: 30s
+
+  - id: fmt
+    run: test -z "$(gofmt -l .)"
+    severity: error
+    suggestion: "Run 'gofmt -w .' to format your Go code"
+    timeout: 5s
+
+  - id: vet
+    run: go vet {{.go_packages}}
+    severity: error
+    suggestion: "Fix the issues reported by go vet. These are often real bugs."
+    timeout: 10s
+    requires:
+      - build
+
+  - id: test
+    run: go test {{.go_packages}}
+    severity: error
+    suggestion: "Fix failing tests before committing"
+    timeout: 60s
+    requires:
+      - vet
+
+  - id: coverage
+    run: go test -cover ./... 2>&1 | tail -1
+    grok:
+      - "coverage: %{NUMBER:coverage}%"
+    assert: "coverage >= 70"
+    severity: warning
+    suggestion: "Coverage is {{.coverage}}%, target is 70%. Add tests to improve coverage."
+    timeout: 60s
+    requires:
+      - test
