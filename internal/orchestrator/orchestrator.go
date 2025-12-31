@@ -23,10 +23,11 @@ type CheckResult struct {
 
 // RunResult contains the complete results of running all checks.
 type RunResult struct {
-	Results    []*CheckResult
-	Violations []*Violation
-	Duration   time.Duration
-	ExitCode   int
+	Results           []*CheckResult
+	Violations        []*Violation
+	Duration          time.Duration
+	ExitCode          int
+	FailFastTriggered bool // True if execution was stopped early due to fail-fast
 }
 
 // Violation represents a check failure.
@@ -89,6 +90,10 @@ func (o *Orchestrator) Run(ctx context.Context) (*RunResult, error) {
 	// Flag to signal fail-fast termination
 	failFastTriggered := false
 
+	// Create a cancellable context for fail-fast cancellation
+	failFastCtx, cancelFailFast := context.WithCancel(ctx)
+	defer cancelFailFast()
+
 	// Execute checks level by level (topological order)
 	// Within each level, checks run in parallel (limited by maxParallel)
 	for _, level := range graph.Levels() {
@@ -102,7 +107,7 @@ func (o *Orchestrator) Run(ctx context.Context) (*RunResult, error) {
 		levelViolations := make([]*Violation, 0)
 
 		// Use errgroup for parallel execution with context cancellation
-		g, gctx := errgroup.WithContext(ctx)
+		g, gctx := errgroup.WithContext(failFastCtx)
 
 		// Semaphore to limit concurrency
 		sem := make(chan struct{}, o.maxParallel)
@@ -212,6 +217,7 @@ func (o *Orchestrator) Run(ctx context.Context) (*RunResult, error) {
 
 					if o.failFast && check.Severity == config.SeverityError {
 						failFastTriggered = true
+						cancelFailFast() // Cancel in-flight checks
 					}
 				}
 				mu.Unlock()
@@ -222,7 +228,12 @@ func (o *Orchestrator) Run(ctx context.Context) (*RunResult, error) {
 
 		// Wait for all goroutines in this level to complete
 		if err := g.Wait(); err != nil {
-			return nil, err
+			// If fail-fast was triggered, context.Canceled is expected
+			if failFastTriggered && err == context.Canceled {
+				// Continue to collect results from this level
+			} else {
+				return nil, err
+			}
 		}
 
 		// Append level results in order
@@ -240,10 +251,11 @@ func (o *Orchestrator) Run(ctx context.Context) (*RunResult, error) {
 	}
 
 	return &RunResult{
-		Results:    results,
-		Violations: violations,
-		Duration:   time.Since(start),
-		ExitCode:   o.calculateExitCode(violations),
+		Results:           results,
+		Violations:        violations,
+		Duration:          time.Since(start),
+		ExitCode:          o.calculateExitCode(violations),
+		FailFastTriggered: failFastTriggered,
 	}, nil
 }
 

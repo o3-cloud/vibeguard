@@ -367,3 +367,61 @@ func TestNew_DefaultsToCurrentDir(t *testing.T) {
 		t.Error("workDir should default to current directory, not empty")
 	}
 }
+
+func TestExecute_ContextCancelled_SetsCancelledFlag(t *testing.T) {
+	exec := New("")
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Cancel immediately
+	cancel()
+
+	result, err := exec.Execute(ctx, "test-cancelled", "sleep 5")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Cancelled flag should be true
+	if !result.Cancelled {
+		t.Error("expected Cancelled to be true for cancelled context")
+	}
+
+	// Should not be marked as timeout
+	if result.Timedout {
+		t.Error("expected Timedout to be false for cancellation (not timeout)")
+	}
+
+	// Exit code should be -1 for cancelled
+	if result.ExitCode != -1 {
+		t.Errorf("expected exit code -1 for cancellation, got %d", result.ExitCode)
+	}
+}
+
+func TestExecute_NormalCompletion_CancelledFlagFalse(t *testing.T) {
+	exec := New("")
+
+	result, err := exec.Execute(context.Background(), "test-normal", "echo hello")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.Cancelled {
+		t.Error("expected Cancelled to be false for normally completed command")
+	}
+}
+
+func TestResult_String_Cancelled(t *testing.T) {
+	result := &Result{
+		CheckID:   "test-check",
+		ExitCode:  -1,
+		Duration:  100 * time.Millisecond,
+		Success:   false,
+		Cancelled: true,
+	}
+
+	expected := "test-check: cancelled (exit=-1, duration=100ms)"
+	got := result.String()
+	if got != expected {
+		t.Errorf("expected %q, got %q", expected, got)
+	}
+}

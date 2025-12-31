@@ -15,15 +15,16 @@ const ExitCodeTimeout = 3
 
 // Result contains the execution result of a check command.
 type Result struct {
-	CheckID  string
-	ExitCode int
-	Stdout   string
-	Stderr   string
-	Combined string
-	Duration time.Duration
-	Success  bool
-	Timedout bool
-	Error    error
+	CheckID   string
+	ExitCode  int
+	Stdout    string
+	Stderr    string
+	Combined  string
+	Duration  time.Duration
+	Success   bool
+	Timedout  bool
+	Cancelled bool // True if the check was cancelled (e.g., by fail-fast)
+	Error     error
 }
 
 // Executor runs check commands and captures their output.
@@ -61,9 +62,10 @@ func (e *Executor) Execute(ctx context.Context, checkID, command string) (*Resul
 	err := cmd.Run()
 	duration := time.Since(start)
 
-	// Determine exit code and timeout status
+	// Determine exit code, timeout, and cancellation status
 	exitCode := 0
 	timedout := false
+	cancelled := false
 
 	if err != nil {
 		// Check if context was cancelled due to timeout
@@ -71,6 +73,12 @@ func (e *Executor) Execute(ctx context.Context, checkID, command string) (*Resul
 			timedout = true
 			exitCode = ExitCodeTimeout
 			err = nil // Timeout is a recognized condition, not an error
+		} else if ctx.Err() == context.Canceled {
+			// Context was cancelled (e.g., by fail-fast)
+			// Treat as a cancelled check, not a timeout
+			cancelled = true
+			exitCode = -1
+			err = nil // Cancellation is a recognized condition, not an error
 		} else if exitErr, ok := err.(*exec.ExitError); ok {
 			exitCode = exitErr.ExitCode()
 			err = nil // Non-zero exit is not an error for us
@@ -81,15 +89,16 @@ func (e *Executor) Execute(ctx context.Context, checkID, command string) (*Resul
 	combined := stdout.String() + stderr.String()
 
 	return &Result{
-		CheckID:  checkID,
-		ExitCode: exitCode,
-		Stdout:   stdout.String(),
-		Stderr:   stderr.String(),
-		Combined: combined,
-		Duration: duration,
-		Success:  exitCode == 0,
-		Timedout: timedout,
-		Error:    err,
+		CheckID:   checkID,
+		ExitCode:  exitCode,
+		Stdout:    stdout.String(),
+		Stderr:    stderr.String(),
+		Combined:  combined,
+		Duration:  duration,
+		Success:   exitCode == 0,
+		Timedout:  timedout,
+		Cancelled: cancelled,
+		Error:     err,
 	}, nil
 }
 
@@ -98,6 +107,8 @@ func (r *Result) String() string {
 	status := "passed"
 	if r.Timedout {
 		status = "timeout"
+	} else if r.Cancelled {
+		status = "cancelled"
 	} else if !r.Success {
 		status = "failed"
 	}

@@ -9,9 +9,10 @@ import (
 
 // JSONOutput represents the JSON output format.
 type JSONOutput struct {
-	Checks     []JSONCheck     `json:"checks"`
-	Violations []JSONViolation `json:"violations"`
-	ExitCode   int             `json:"exit_code"`
+	Checks            []JSONCheck     `json:"checks"`
+	Violations        []JSONViolation `json:"violations"`
+	ExitCode          int             `json:"exit_code"`
+	FailFastTriggered bool            `json:"fail_fast_triggered,omitempty"`
 }
 
 // JSONCheck represents a check result in JSON format.
@@ -33,14 +34,17 @@ type JSONViolation struct {
 // FormatJSON outputs the result in JSON format.
 func FormatJSON(out io.Writer, result *orchestrator.RunResult) error {
 	output := JSONOutput{
-		Checks:     make([]JSONCheck, 0, len(result.Results)),
-		Violations: make([]JSONViolation, 0, len(result.Violations)),
-		ExitCode:   result.ExitCode,
+		Checks:            make([]JSONCheck, 0, len(result.Results)),
+		Violations:        make([]JSONViolation, 0, len(result.Violations)),
+		ExitCode:          result.ExitCode,
+		FailFastTriggered: result.FailFastTriggered,
 	}
 
 	for _, r := range result.Results {
 		status := "passed"
-		if !r.Passed {
+		if r.Execution.Cancelled {
+			status = "cancelled"
+		} else if !r.Passed {
 			status = "failed"
 		}
 		output.Checks = append(output.Checks, JSONCheck{

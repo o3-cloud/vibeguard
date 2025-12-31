@@ -40,6 +40,9 @@ func (f *Formatter) formatQuiet(result *orchestrator.RunResult) {
 	for _, v := range result.Violations {
 		f.formatViolation(v)
 	}
+	if result.FailFastTriggered {
+		fmt.Fprintf(f.out, "Execution stopped early due to --fail-fast\n")
+	}
 }
 
 // formatVerbose outputs all check results.
@@ -48,6 +51,8 @@ func (f *Formatter) formatVerbose(result *orchestrator.RunResult) {
 		if r.Passed {
 			fmt.Fprintf(f.out, "✓ %-15s passed (%.1fs)\n",
 				r.Check.ID, r.Execution.Duration.Seconds())
+		} else if r.Execution.Cancelled {
+			fmt.Fprintf(f.out, "⊘ %-15s cancelled\n", r.Check.ID)
 		} else {
 			fmt.Fprintf(f.out, "✗ %-15s FAIL (%.1fs)\n",
 				r.Check.ID, r.Execution.Duration.Seconds())
@@ -61,6 +66,9 @@ func (f *Formatter) formatVerbose(result *orchestrator.RunResult) {
 				fmt.Fprintf(f.out, "  %s\n", suggestion)
 			}
 		}
+	}
+	if result.FailFastTriggered {
+		fmt.Fprintf(f.out, "\nExecution stopped early due to --fail-fast\n")
 	}
 }
 

@@ -1267,3 +1267,154 @@ func TestRunCheck_Timeout_ViolationMarkedAsTimeout(t *testing.T) {
 		t.Error("expected violation to be marked as timeout")
 	}
 }
+
+// Fail-fast context cancellation tests
+
+func TestRun_FailFast_SetsFailFastTriggeredFlag(t *testing.T) {
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{
+				ID:       "failing",
+				Run:      "exit 1",
+				Severity: config.SeverityError,
+			},
+			{
+				ID:       "dependent",
+				Run:      "echo should-not-run",
+				Severity: config.SeverityError,
+				Requires: []string{"failing"},
+			},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 1, true, false) // failFast = true
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !result.FailFastTriggered {
+		t.Error("expected FailFastTriggered to be true")
+	}
+}
+
+func TestRun_NoFailFast_FailFastTriggeredFalse(t *testing.T) {
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{
+				ID:       "failing",
+				Run:      "exit 1",
+				Severity: config.SeverityError,
+			},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 1, false, false) // failFast = false
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.FailFastTriggered {
+		t.Error("expected FailFastTriggered to be false when fail-fast is disabled")
+	}
+}
+
+func TestRun_FailFast_WarningSeverityDoesNotTrigger(t *testing.T) {
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{
+				ID:       "warning",
+				Run:      "exit 1",
+				Severity: config.SeverityWarning, // Warning severity
+			},
+			{
+				ID:       "second",
+				Run:      "echo should-run",
+				Severity: config.SeverityError,
+				Requires: []string{"warning"},
+			},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 1, true, false) // failFast = true
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Warning severity should not trigger fail-fast
+	if result.FailFastTriggered {
+		t.Error("expected FailFastTriggered to be false for warning severity")
+	}
+}
+
+func TestRun_FailFast_CancelsLongRunningChecks(t *testing.T) {
+	// Test that fail-fast cancels in-flight long-running checks
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{
+				ID:       "fast-fail",
+				Run:      "exit 1",
+				Severity: config.SeverityError,
+			},
+			{
+				ID:       "slow-check",
+				Run:      "sleep 10", // Would take 10 seconds without cancellation
+				Severity: config.SeverityError,
+			},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 4, true, false) // failFast = true, parallel
+
+	start := time.Now()
+	result, err := orch.Run(context.Background())
+	duration := time.Since(start)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should complete much faster than 10 seconds due to cancellation
+	if duration > 2*time.Second {
+		t.Errorf("expected fail-fast to cancel long-running check quickly, took %v", duration)
+	}
+
+	if !result.FailFastTriggered {
+		t.Error("expected FailFastTriggered to be true")
+	}
+}
+
+func TestRun_FailFast_AllChecksPassDoesNotTrigger(t *testing.T) {
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{ID: "a", Run: "exit 0", Severity: config.SeverityError},
+			{ID: "b", Run: "exit 0", Severity: config.SeverityError},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 4, true, false) // failFast = true
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.FailFastTriggered {
+		t.Error("expected FailFastTriggered to be false when all checks pass")
+	}
+}
