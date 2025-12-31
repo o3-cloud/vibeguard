@@ -148,12 +148,15 @@ func TestRunAssist_OutputToFile(t *testing.T) {
 	}
 
 	// Verify expected sections
+	// After integration with validator_guide.go, the prompt now includes
+	// comprehensive validation sections from the assist package
 	contentStr := string(content)
 	expectedSections := []string{
 		"# VibeGuard AI Agent Setup Guide",
 		"## Project Analysis",
 		"## Recommended Checks",
-		"## Configuration Requirements",
+		"## YAML Syntax Requirements",
+		"## Check Structure Requirements",
 		"## Your Task",
 	}
 

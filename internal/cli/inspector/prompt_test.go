@@ -57,11 +57,16 @@ func TestGenerateSetupPrompt(t *testing.T) {
 	t.Logf("Generated prompt length: %d characters, ~%d tokens", len(prompt), len(prompt)/4)
 
 	// Verify prompt contains expected sections
+	// After integration with validator_guide.go, the prompt now includes
+	// comprehensive validation sections from the assist package
 	requiredSections := []string{
 		"# VibeGuard AI Agent Setup Guide",
 		"## Project Analysis",
-		"## Configuration Requirements",
-		"## Validation Rules",
+		"## YAML Syntax Requirements",
+		"## Check Structure Requirements",
+		"## Dependency Validation Rules",
+		"## Variable Interpolation Rules",
+		"## Explicit DO NOT List",
 		"## Your Task",
 	}
 
