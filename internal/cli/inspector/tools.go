@@ -449,6 +449,51 @@ func (s *ToolScanner) scanPythonTools() ([]ToolInfo, error) {
 	}
 	tools = append(tools, flake8)
 
+	// isort (import sorter)
+	isort := ToolInfo{
+		Name:     "isort",
+		Category: CategoryFormatter,
+	}
+	if configPath := s.findFile(".isort.cfg"); configPath != "" {
+		isort.Detected = true
+		isort.ConfigFile = configPath
+		isort.Confidence = 0.95
+		isort.Indicators = []string{configPath}
+	} else if hasPyproject && strings.Contains(pyprojectContent, "[tool.isort]") {
+		isort.Detected = true
+		isort.ConfigFile = "pyproject.toml"
+		isort.Confidence = 0.9
+		isort.Indicators = []string{"[tool.isort] in pyproject.toml"}
+	} else if s.fileExists("setup.cfg") && s.fileContains("setup.cfg", "[isort]") {
+		isort.Detected = true
+		isort.ConfigFile = "setup.cfg"
+		isort.Confidence = 0.9
+		isort.Indicators = []string{"[isort] in setup.cfg"}
+	} else if s.fileContains("requirements.txt", "isort") || s.fileContains("requirements-dev.txt", "isort") {
+		isort.Detected = true
+		isort.Confidence = 0.7
+		isort.Indicators = []string{"isort in requirements"}
+	}
+	tools = append(tools, isort)
+
+	// pip-audit (security scanner for Python dependencies)
+	pipAudit := ToolInfo{
+		Name:     "pip-audit",
+		Category: CategorySecurity,
+	}
+	// pip-audit is typically installed globally or in requirements
+	if s.fileContains("requirements.txt", "pip-audit") || s.fileContains("requirements-dev.txt", "pip-audit") {
+		pipAudit.Detected = true
+		pipAudit.Confidence = 0.8
+		pipAudit.Indicators = []string{"pip-audit in requirements"}
+	} else if s.fileExists("requirements.txt") || s.fileExists("pyproject.toml") || s.fileExists("setup.py") {
+		// Recommend pip-audit for any Python project
+		pipAudit.Detected = true
+		pipAudit.Confidence = 0.6
+		pipAudit.Indicators = []string{"Python project detected (pip-audit recommended)"}
+	}
+	tools = append(tools, pipAudit)
+
 	return tools, nil
 }
 

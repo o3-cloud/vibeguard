@@ -113,6 +113,10 @@ func (r *Recommender) recommendationsForTool(tool ToolInfo) []CheckRecommendatio
 		return r.ruffRecommendations(tool)
 	case "flake8":
 		return r.flake8Recommendations(tool)
+	case "isort":
+		return r.isortRecommendations(tool)
+	case "pip-audit":
+		return r.pipAuditRecommendations(tool)
 
 	// Git hooks
 	case "pre-commit":
@@ -473,6 +477,38 @@ func (r *Recommender) flake8Recommendations(tool ToolInfo) []CheckRecommendation
 			Category:    "lint",
 			Tool:        "flake8",
 			Priority:    20,
+		},
+	}
+}
+
+func (r *Recommender) isortRecommendations(tool ToolInfo) []CheckRecommendation {
+	return []CheckRecommendation{
+		{
+			ID:          "imports",
+			Description: "Check Python import sorting with isort",
+			Rationale:   "isort ensures consistent import organization and grouping",
+			Command:     "isort --check-only --diff .",
+			Severity:    "error",
+			Suggestion:  "Run 'isort .' to fix import ordering.",
+			Category:    "format",
+			Tool:        "isort",
+			Priority:    11,
+		},
+	}
+}
+
+func (r *Recommender) pipAuditRecommendations(tool ToolInfo) []CheckRecommendation {
+	return []CheckRecommendation{
+		{
+			ID:          "security",
+			Description: "Check for known security vulnerabilities in Python dependencies",
+			Rationale:   "pip-audit identifies packages with known security issues from PyPI advisory database",
+			Command:     "pip-audit",
+			Severity:    "warning",
+			Suggestion:  "Update vulnerable packages or review security advisories. Run 'pip-audit --fix' to attempt automatic fixes.",
+			Category:    "security",
+			Tool:        "pip-audit",
+			Priority:    50,
 		},
 	}
 }

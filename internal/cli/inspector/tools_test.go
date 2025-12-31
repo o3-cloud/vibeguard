@@ -1820,3 +1820,252 @@ func TestToolScanner_ScanGoTools_GolangciLintVariants(t *testing.T) {
 		})
 	}
 }
+
+func TestToolScanner_ScanPythonTools_Isort(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Write .isort.cfg
+	if err := os.WriteFile(filepath.Join(tmpDir, ".isort.cfg"), []byte("[settings]\nprofile = black\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	tools, err := scanner.scanPythonTools()
+	if err != nil {
+		t.Fatalf("scanPythonTools failed: %v", err)
+	}
+
+	var isort *ToolInfo
+	for i := range tools {
+		if tools[i].Name == "isort" {
+			isort = &tools[i]
+			break
+		}
+	}
+
+	if isort == nil || !isort.Detected {
+		t.Error("isort should be detected from .isort.cfg")
+	} else {
+		if isort.ConfigFile != ".isort.cfg" {
+			t.Errorf("isort config should be .isort.cfg, got %s", isort.ConfigFile)
+		}
+		if isort.Category != CategoryFormatter {
+			t.Errorf("isort category should be formatter, got %s", isort.Category)
+		}
+	}
+}
+
+func TestToolScanner_ScanPythonTools_IsortInPyproject(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Write pyproject.toml with isort section
+	pyproject := `[tool.isort]
+profile = "black"
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "pyproject.toml"), []byte(pyproject), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	tools, err := scanner.scanPythonTools()
+	if err != nil {
+		t.Fatalf("scanPythonTools failed: %v", err)
+	}
+
+	var isort *ToolInfo
+	for i := range tools {
+		if tools[i].Name == "isort" {
+			isort = &tools[i]
+			break
+		}
+	}
+
+	if isort == nil || !isort.Detected {
+		t.Error("isort should be detected from pyproject.toml")
+	} else {
+		if isort.ConfigFile != "pyproject.toml" {
+			t.Errorf("isort config should be pyproject.toml, got %s", isort.ConfigFile)
+		}
+	}
+}
+
+func TestToolScanner_ScanPythonTools_IsortInSetupCfg(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Write setup.cfg with isort section
+	setupCfg := `[isort]
+profile = black
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "setup.cfg"), []byte(setupCfg), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	tools, err := scanner.scanPythonTools()
+	if err != nil {
+		t.Fatalf("scanPythonTools failed: %v", err)
+	}
+
+	var isort *ToolInfo
+	for i := range tools {
+		if tools[i].Name == "isort" {
+			isort = &tools[i]
+			break
+		}
+	}
+
+	if isort == nil || !isort.Detected {
+		t.Error("isort should be detected from setup.cfg")
+	}
+}
+
+func TestToolScanner_ScanPythonTools_IsortInRequirements(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Write requirements-dev.txt with isort
+	if err := os.WriteFile(filepath.Join(tmpDir, "requirements-dev.txt"), []byte("isort==5.12.0\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	tools, err := scanner.scanPythonTools()
+	if err != nil {
+		t.Fatalf("scanPythonTools failed: %v", err)
+	}
+
+	var isort *ToolInfo
+	for i := range tools {
+		if tools[i].Name == "isort" {
+			isort = &tools[i]
+			break
+		}
+	}
+
+	if isort == nil || !isort.Detected {
+		t.Error("isort should be detected from requirements-dev.txt")
+	}
+}
+
+func TestToolScanner_ScanPythonTools_PipAudit(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Write requirements-dev.txt with pip-audit
+	if err := os.WriteFile(filepath.Join(tmpDir, "requirements-dev.txt"), []byte("pip-audit==2.6.0\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	tools, err := scanner.scanPythonTools()
+	if err != nil {
+		t.Fatalf("scanPythonTools failed: %v", err)
+	}
+
+	var pipAudit *ToolInfo
+	for i := range tools {
+		if tools[i].Name == "pip-audit" {
+			pipAudit = &tools[i]
+			break
+		}
+	}
+
+	if pipAudit == nil || !pipAudit.Detected {
+		t.Error("pip-audit should be detected from requirements-dev.txt")
+	} else {
+		if pipAudit.Category != CategorySecurity {
+			t.Errorf("pip-audit category should be security, got %s", pipAudit.Category)
+		}
+		if pipAudit.Confidence < 0.8 {
+			t.Errorf("pip-audit confidence should be >= 0.8 when explicitly in requirements, got %f", pipAudit.Confidence)
+		}
+	}
+}
+
+func TestToolScanner_ScanPythonTools_PipAuditRecommended(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Write requirements.txt (Python project indicator, pip-audit not explicitly listed)
+	if err := os.WriteFile(filepath.Join(tmpDir, "requirements.txt"), []byte("requests==2.28.0\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	tools, err := scanner.scanPythonTools()
+	if err != nil {
+		t.Fatalf("scanPythonTools failed: %v", err)
+	}
+
+	var pipAudit *ToolInfo
+	for i := range tools {
+		if tools[i].Name == "pip-audit" {
+			pipAudit = &tools[i]
+			break
+		}
+	}
+
+	if pipAudit == nil || !pipAudit.Detected {
+		t.Error("pip-audit should be recommended for Python projects")
+	} else {
+		// Should have lower confidence when just recommended vs explicitly installed
+		if pipAudit.Confidence >= 0.8 {
+			t.Errorf("pip-audit confidence should be < 0.8 when recommended (not explicit), got %f", pipAudit.Confidence)
+		}
+	}
+}
+
+func TestToolScanner_ScanPythonTools_FullToolchain(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a comprehensive Python project with all common tools
+	pyproject := `[project]
+name = "test-project"
+version = "1.0.0"
+
+[tool.black]
+line-length = 88
+
+[tool.isort]
+profile = "black"
+
+[tool.mypy]
+strict = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "pyproject.toml"), []byte(pyproject), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Add requirements-dev.txt with additional tools
+	reqDev := `pylint==2.17.0
+pip-audit==2.6.0
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "requirements-dev.txt"), []byte(reqDev), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	tools, err := scanner.scanPythonTools()
+	if err != nil {
+		t.Fatalf("scanPythonTools failed: %v", err)
+	}
+
+	// Build map of detected tools
+	detectedTools := make(map[string]bool)
+	for _, tool := range tools {
+		if tool.Detected {
+			detectedTools[tool.Name] = true
+		}
+	}
+
+	// Verify all expected tools are detected
+	expectedTools := []string{"black", "isort", "mypy", "pytest", "ruff", "pylint", "pip-audit"}
+	for _, expected := range expectedTools {
+		if !detectedTools[expected] {
+			t.Errorf("expected tool %s to be detected", expected)
+		}
+	}
+}

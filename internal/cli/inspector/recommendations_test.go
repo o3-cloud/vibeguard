@@ -512,3 +512,106 @@ func TestRecommender_MultipleTestFrameworks(t *testing.T) {
 		t.Error("expected vitest recommendation")
 	}
 }
+
+func TestRecommender_Isort(t *testing.T) {
+	tools := []ToolInfo{
+		{Name: "isort", Detected: true},
+	}
+
+	r := NewRecommender(Python, tools)
+	recs := r.Recommend()
+
+	var importsRec *CheckRecommendation
+	for i := range recs {
+		if recs[i].ID == "imports" && recs[i].Tool == "isort" {
+			importsRec = &recs[i]
+			break
+		}
+	}
+
+	if importsRec == nil {
+		t.Fatal("isort imports recommendation not found")
+	}
+
+	if importsRec.Tool != "isort" {
+		t.Errorf("expected tool isort, got %s", importsRec.Tool)
+	}
+	if importsRec.Category != "format" {
+		t.Errorf("expected category format, got %s", importsRec.Category)
+	}
+	if importsRec.Priority != 11 {
+		t.Errorf("expected priority 11, got %d", importsRec.Priority)
+	}
+}
+
+func TestRecommender_PipAuditSecurity(t *testing.T) {
+	tools := []ToolInfo{
+		{Name: "pip-audit", Detected: true},
+	}
+
+	r := NewRecommender(Python, tools)
+	recs := r.Recommend()
+
+	var securityRec *CheckRecommendation
+	for i := range recs {
+		if recs[i].ID == "security" && recs[i].Tool == "pip-audit" {
+			securityRec = &recs[i]
+			break
+		}
+	}
+
+	if securityRec == nil {
+		t.Fatal("pip-audit security recommendation not found")
+	}
+
+	if securityRec.Category != "security" {
+		t.Errorf("expected category security, got %s", securityRec.Category)
+	}
+	if securityRec.Severity != "warning" {
+		t.Errorf("expected severity warning, got %s", securityRec.Severity)
+	}
+	if securityRec.Priority != 50 {
+		t.Errorf("expected priority 50, got %d", securityRec.Priority)
+	}
+}
+
+func TestRecommender_PythonFullToolchain(t *testing.T) {
+	// Test a complete Python toolchain with all common tools
+	tools := []ToolInfo{
+		{Name: "black", Detected: true},
+		{Name: "isort", Detected: true},
+		{Name: "pylint", Detected: true},
+		{Name: "mypy", Detected: true},
+		{Name: "pytest", Detected: true},
+		{Name: "pip-audit", Detected: true},
+	}
+
+	r := NewRecommender(Python, tools)
+	recs := r.Recommend()
+
+	// Verify we have all expected categories
+	categories := make(map[string]bool)
+	for _, rec := range recs {
+		categories[rec.Category] = true
+	}
+
+	expectedCategories := []string{"format", "lint", "typecheck", "test", "security"}
+	for _, cat := range expectedCategories {
+		if !categories[cat] {
+			t.Errorf("expected category %q in recommendations", cat)
+		}
+	}
+
+	// Verify tools are present
+	toolsFound := make(map[string]bool)
+	for _, rec := range recs {
+		toolsFound[rec.Tool] = true
+	}
+
+	expectedTools := []string{"black", "isort", "pylint", "mypy", "pytest", "pip-audit"}
+	for _, tool := range expectedTools {
+		if !toolsFound[tool] {
+			t.Errorf("expected tool %q in recommendations", tool)
+		}
+	}
+}
