@@ -45,7 +45,7 @@ func TestRun_PassingCheck_ExitCodeZero(t *testing.T) {
 	}
 }
 
-func TestRun_FailingCheck_ErrorSeverity_ExitCodeTwo(t *testing.T) {
+func TestRun_FailingCheck_ErrorSeverity_ExitCodeThree(t *testing.T) {
 	cfg := &config.Config{
 		Version: "1",
 		Checks: []config.Check{
@@ -66,7 +66,7 @@ func TestRun_FailingCheck_ErrorSeverity_ExitCodeTwo(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Exit code 2 for violations (Claude Code hook compatibility)
+	// Exit code 3 for violations (execution errors)
 	if result.ExitCode != executor.ExitCodeViolation {
 		t.Errorf("expected exit code %d, got %d", executor.ExitCodeViolation, result.ExitCode)
 	}
@@ -156,7 +156,7 @@ func TestRun_MultipleChecks_MixedResults(t *testing.T) {
 	}
 }
 
-func TestRun_MultipleChecks_ErrorFailure_ExitCodeTwo(t *testing.T) {
+func TestRun_MultipleChecks_ErrorFailure_ExitCodeThree(t *testing.T) {
 	cfg := &config.Config{
 		Version: "1",
 		Checks: []config.Check{
@@ -303,7 +303,7 @@ func TestRunCheck_SingleCheck_Fails(t *testing.T) {
 	}
 }
 
-func TestRunCheck_UnknownCheck_ExitCodeThree(t *testing.T) {
+func TestRunCheck_UnknownCheck_ExitCodeTwo(t *testing.T) {
 	cfg := &config.Config{
 		Version: "1",
 		Checks: []config.Check{
@@ -323,7 +323,7 @@ func TestRunCheck_UnknownCheck_ExitCodeThree(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Unknown check should return exit code 3 (config error)
+	// Unknown check should return exit code 2 (config error)
 	if result.ExitCode != executor.ExitCodeConfigError {
 		t.Errorf("expected exit code %d for unknown check, got %d", executor.ExitCodeConfigError, result.ExitCode)
 	}

@@ -14,8 +14,8 @@ import (
 // These are designed for Claude Code hook compatibility where exit codes ≥2 are blocking.
 const (
 	ExitCodeSuccess     = 0 // All checks passed
-	ExitCodeViolation   = 2 // One or more error-severity violations
-	ExitCodeConfigError = 3 // Configuration error
+	ExitCodeConfigError = 2 // Configuration error (config-time errors)
+	ExitCodeViolation   = 3 // One or more error-severity violations (execution errors)
 	ExitCodeTimeout     = 4 // Check execution error (timeout, command not found)
 )
 
