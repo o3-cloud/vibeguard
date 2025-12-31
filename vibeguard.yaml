@@ -22,14 +22,15 @@ checks:
     suggestion: "Install golangci-lint and run 'golangci-lint run' to fix reported issues"
     timeout: 120s
 
-  - id: test
-    run: go test -race -cover {{.go_packages}}
+  - id: test-coverage
+    run: |
+      go test -race -coverprofile=coverage.out ./... && \
+      coverage=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | tr -d '%') && \
+      echo "Total coverage: ${coverage}%" && \
+      awk "BEGIN {exit ($coverage < 90)}"
     severity: error
-    suggestion: "Run 'go test ./...' and fix failing tests"
+    suggestion: "Coverage is below 80%. Add tests to improve coverage."
     timeout: 300s
-    requires:
-      - vet
-      - fmt
 
   - id: build
     run: go build {{.go_packages}}
@@ -38,3 +39,15 @@ checks:
     timeout: 60s
     requires:
       - vet
+
+  - id: error
+    run: exit 1
+    severity: error
+    suggestion: "This check is designed to fail the pipeline. Use it to test error handling in vibeguard."
+    timeout: 120s
+
+  - id: timeout
+    run: sleep 10
+    severity: error
+    suggestion: "This check is designed to test timeout handling in vibeguard. It will fail if it runs longer than the specified timeout."
+    timeout: 1s

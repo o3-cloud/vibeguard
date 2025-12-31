@@ -28,6 +28,11 @@ Major architectural decisions are documented as Architecture Decision Records (A
   - Shift-left approach with local enforcement catches issues before code review
   - Establishes expectations for testing (70% coverage), documentation, and code style
 
+- **[ADR-005: Adopt Vibeguard for Policy Enforcement in CI/CD](docs/adr/ADR-005-adopt-vibeguard.md)**
+  - Decision to use VibeGuard as the unified policy enforcement system for the project
+  - Provides declarative, composable policy definitions in YAML with transparent dependencies
+  - Enables real-world validation of VibeGuard through dogfooding, reducing maintenance burden vs. ad-hoc scripts
+
 ## Project Skills
 
 The `.claude/skills/` directory contains Claude Code skills that automate common workflows:
