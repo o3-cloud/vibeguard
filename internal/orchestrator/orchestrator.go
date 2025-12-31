@@ -4,6 +4,7 @@ package orchestrator
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -350,10 +351,9 @@ func (o *Orchestrator) RunCheck(ctx context.Context, checkID string) (*RunResult
 		}
 	}
 	if check == nil {
-		return &RunResult{
-			Duration: time.Since(start),
-			ExitCode: executor.ExitCodeConfigError,
-		}, nil
+		return nil, &config.ConfigError{
+			Message: fmt.Sprintf("check with ID %q not found", checkID),
+		}
 	}
 
 	// Apply timeout

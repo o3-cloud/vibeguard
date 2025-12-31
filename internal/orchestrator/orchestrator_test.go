@@ -303,7 +303,7 @@ func TestRunCheck_SingleCheck_Fails(t *testing.T) {
 	}
 }
 
-func TestRunCheck_UnknownCheck_ExitCodeTwo(t *testing.T) {
+func TestRunCheck_UnknownCheck_ReturnsConfigError(t *testing.T) {
 	cfg := &config.Config{
 		Version: "1",
 		Checks: []config.Check{
@@ -319,13 +319,18 @@ func TestRunCheck_UnknownCheck_ExitCodeTwo(t *testing.T) {
 	orch := New(cfg, exec, 1, false, false)
 
 	result, err := orch.RunCheck(context.Background(), "non-existent-check")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if err == nil {
+		t.Fatalf("expected error for unknown check, got nil")
 	}
 
-	// Unknown check should return exit code 2 (config error)
-	if result.ExitCode != executor.ExitCodeConfigError {
-		t.Errorf("expected exit code %d for unknown check, got %d", executor.ExitCodeConfigError, result.ExitCode)
+	// Unknown check should return a ConfigError
+	if !config.IsConfigError(err) {
+		t.Errorf("expected ConfigError for unknown check, got %T: %v", err, err)
+	}
+
+	// Result should be nil when there's an error
+	if result != nil {
+		t.Errorf("expected nil result for unknown check, got %v", result)
 	}
 }
 

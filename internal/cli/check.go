@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -11,6 +12,15 @@ import (
 	"github.com/vibeguard/vibeguard/internal/orchestrator"
 	"github.com/vibeguard/vibeguard/internal/output"
 )
+
+// ExitError represents a check execution that completed but needs a specific exit code.
+type ExitError struct {
+	Code int
+}
+
+func (e *ExitError) Error() string {
+	return fmt.Sprintf("exit code %d", e.Code)
+}
 
 var checkCmd = &cobra.Command{
 	Use:   "check [id]",
@@ -67,9 +77,10 @@ func runCheck(cmd *cobra.Command, args []string) error {
 		formatter.FormatResult(result)
 	}
 
-	// Exit with appropriate code
+	// Exit with appropriate code if needed
+	// We return an error with the appropriate exit code wrapping
 	if result.ExitCode != 0 {
-		os.Exit(result.ExitCode)
+		return &ExitError{Code: result.ExitCode}
 	}
 
 	return nil
