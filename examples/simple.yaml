@@ -1,0 +1,27 @@
+# Simple Example: Basic Go Project Checks
+# This example shows minimal configuration with fundamental checks.
+# Suitable for getting started with VibeGuard.
+
+version: "1"
+
+checks:
+  # Format check: Ensure code is properly formatted
+  - id: fmt
+    run: test -z "$(gofmt -l .)"
+    severity: error
+    suggestion: "Run 'gofmt -w .' to format your code"
+    timeout: 5s
+
+  # Vet check: Run go vet for code analysis
+  - id: vet
+    run: go vet ./...
+    severity: error
+    suggestion: "Run 'go vet ./...' and fix reported issues"
+    timeout: 10s
+
+  # Test check: Ensure tests pass
+  - id: test
+    run: go test ./...
+    severity: error
+    suggestion: "Run 'go test ./...' to diagnose test failures"
+    timeout: 30s

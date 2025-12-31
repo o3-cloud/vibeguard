@@ -11,20 +11,40 @@ VibeGuard enforces policies at scale with minimal overhead. It combines declarat
 - **Single Binary Deployment** — Compiled Go binary with zero runtime dependencies
 - **Fast & Lightweight** — Minimal resource usage and quick startup time for frequent invocation
 - **Declarative Policies** — Define policies in YAML for clarity and maintainability
-- **Multiple Runner Patterns** — Supports various policy evaluation approaches (see patterns below)
+- **Multiple Runner Patterns** — Supports various policy evaluation approaches
 - **Judge Integration** — Leverage LLMs for nuanced policy evaluation
 - **Cross-Platform** — Runs seamlessly on Linux, macOS, and Windows
 
 ## Quick Start
 
-### Building
+### Installation
+
+Download a pre-built binary from [releases](https://github.com/vibeguard/vibeguard/releases), or build from source:
 
 ```bash
-# Build the binary
+git clone https://github.com/vibeguard/vibeguard.git
+cd vibeguard
 go build -o vibeguard ./cmd/vibeguard
+```
 
-# Run the CLI
-./vibeguard --help
+### Basic Usage
+
+Initialize a configuration file:
+
+```bash
+vibeguard init
+```
+
+Run all checks:
+
+```bash
+vibeguard check
+```
+
+Run a specific check:
+
+```bash
+vibeguard check fmt
 ```
 
 ### Running Tests
@@ -33,9 +53,162 @@ go build -o vibeguard ./cmd/vibeguard
 go test -v ./...
 ```
 
+## CLI Reference
+
+### Global Flags
+
+All commands support the following flags:
+
+| Flag | Short | Description | Default |
+|------|-------|-------------|---------|
+| `--config` | `-c` | Path to config file | Searches for `vibeguard.yaml`, `vibeguard.yml`, `.vibeguard.yaml`, `.vibeguard.yml` |
+| `--fail-fast` | | Stop on first failure | false |
+| `--json` | | Output results in JSON format | false |
+| `--parallel` | `-p` | Max parallel checks to run | 4 |
+| `--verbose` | `-v` | Show all check results, not just failures | false |
+
+### Commands
+
+#### `vibeguard check [id]`
+
+Run all configured checks, or a specific check by ID.
+
+```bash
+vibeguard check              # Run all checks
+vibeguard check fmt          # Run only the 'fmt' check
+vibeguard check -v           # Run all checks with verbose output
+vibeguard check --fail-fast  # Stop on first failure
+vibeguard check --json       # Output results in JSON format
+```
+
+#### `vibeguard init [flags]`
+
+Create a starter configuration file in the current directory.
+
+```bash
+vibeguard init              # Create vibeguard.yaml if it doesn't exist
+vibeguard init --force      # Overwrite existing configuration file
+```
+
+#### `vibeguard list`
+
+List all checks defined in the configuration file, showing IDs, commands, and dependencies.
+
+```bash
+vibeguard list              # Show all checks
+vibeguard list --json       # Show checks in JSON format
+```
+
+#### `vibeguard validate`
+
+Validate the configuration file without running any checks. Useful for catching errors before execution.
+
+```bash
+vibeguard validate          # Validate the default config file
+vibeguard validate -c prod.yaml  # Validate a specific config file
+```
+
+## Configuration Schema
+
+VibeGuard configurations are written in YAML. Here's the complete schema:
+
+```yaml
+# Configuration version (currently "1")
+version: "1"
+
+# Optional: Global variables for interpolation in check commands
+vars:
+  go_packages: "./..."
+  python_version: "3.11"
+
+# List of checks to execute
+checks:
+  - id: check-name           # Unique check identifier
+    run: command to execute  # Shell command to run (variables interpolated with {{.var_name}})
+
+    # Optional: Extract data from command output using grok patterns
+    grok:
+      - pattern_name: pattern
+      # Multiple patterns can be specified as a list
+
+    # Optional: Assert extracted data meets conditions
+    assert: "condition"      # e.g., "coverage >= 80" or "result == 'ok'"
+
+    # Optional: Severity level when check fails
+    severity: error          # Options: "error", "warning" (default: "error")
+
+    # Optional: Actionable suggestion when check fails
+    suggestion: "How to fix this..."
+
+    # Optional: List of check IDs that must pass before this check runs
+    requires:
+      - other-check-id
+
+    # Optional: Timeout for this check
+    timeout: 30s             # Examples: "5s", "1m", "30s" (default: 30s)
+```
+
+### Field Details
+
+| Field | Required | Type | Description | Default |
+|-------|----------|------|-------------|---------|
+| `version` | Yes | string | Config format version | — |
+| `vars` | No | map[string]string | Global variables for interpolation | — |
+| `checks` | Yes | array | List of checks to run | — |
+| `id` | Yes (per check) | string | Unique check identifier | — |
+| `run` | Yes (per check) | string | Shell command with optional `{{.var}}` interpolation | — |
+| `grok` | No | array[string] | Grok patterns to extract data from command output | — |
+| `assert` | No | string | Assertion expression (requires `grok` patterns) | — |
+| `severity` | No | string | `error` or `warning` | `error` |
+| `suggestion` | No | string | Help text shown when check fails | — |
+| `requires` | No | array[string] | Check IDs that must pass first | — |
+| `timeout` | No | duration | Max execution time (e.g., `5s`, `1m`) | `30s` |
+
+### Variable Interpolation
+
+Use `{{.variable_name}}` syntax to interpolate global variables into check commands:
+
+```yaml
+vars:
+  go_packages: "./..."
+
+checks:
+  - id: vet
+    run: go vet {{.go_packages}}
+```
+
+### Grok Pattern Extraction
+
+Extract structured data from command output using grok patterns:
+
+```yaml
+checks:
+  - id: test-coverage
+    run: go test ./... -coverprofile=cover.out && go tool cover -func=cover.out
+    grok:
+      - total:.*\(statements\)\s+%{NUMBER:coverage}%
+    assert: "coverage >= 80"
+    suggestion: "Coverage is below 80%. Run 'go test ./...' with coverage analysis."
+```
+
+### Check Dependencies
+
+Specify that a check requires other checks to pass first:
+
+```yaml
+checks:
+  - id: vet
+    run: go vet ./...
+
+  - id: build
+    run: go build ./...
+    requires:
+      - vet  # build only runs if vet passes
+```
+
 ## Implementation Patterns
 
-VibeGuard supports five core implementation patterns:
+VibeGuard supports multiple implementation patterns:
 
 1. **Declarative Policy Runner** — Evaluate policies defined in structured formats (YAML/JSON)
 2. **Judge-as-a-Policy** — Use LLMs as policy evaluators
@@ -53,16 +226,21 @@ vibeguard/
 │   └── vibeguard/              # Main CLI application
 ├── internal/
 │   ├── cli/                    # Command-line interface (Cobra-based)
-│   ├── config/                 # Configuration loading
+│   ├── config/                 # Configuration loading and validation
 │   ├── judge/                  # Judge API integration
 │   ├── policy/                 # Policy evaluation engine
-│   └── runner/                 # Runner implementations
-├── pkg/
-│   └── models/                 # Shared data models
+│   ├── runner/                 # Runner implementations
+│   ├── output/                 # Output formatting (text, JSON)
+│   └── assert/                 # Assertion expression parsing and evaluation
 ├── docs/
 │   ├── adr/                    # Architecture Decision Records
-│   └── patterns/               # Implementation patterns
-└── README.md, CONVENTIONS.md   # Documentation
+│   ├── log/                    # Work logs and findings
+│   └── patterns/               # Implementation patterns (future)
+├── examples/                   # Example configurations
+├── README.md                   # This file
+├── CONVENTIONS.md              # Code style and development standards
+├── CLAUDE.md                   # Claude Code agent documentation
+└── vibeguard.yaml              # Default configuration file
 ```
 
 ## Development

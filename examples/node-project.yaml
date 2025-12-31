@@ -1,0 +1,61 @@
+# Node.js Project Example: JavaScript/TypeScript Quality Checks
+# This example demonstrates quality gates for JavaScript/TypeScript projects,
+# including linting, formatting, type checking, and testing.
+
+version: "1"
+
+vars:
+  source_dir: "src"
+  min_coverage: "75"
+
+checks:
+  # Format check using Prettier
+  - id: format
+    run: npx prettier --check .
+    severity: error
+    suggestion: "Run 'npx prettier --write .' to format your code"
+    timeout: 30s
+
+  # Lint check using ESLint
+  - id: lint
+    run: npx eslint {{.source_dir}} --max-warnings 0
+    severity: error
+    suggestion: "Run 'npx eslint {{.source_dir}} --fix' to fix linting issues"
+    timeout: 30s
+
+  # Type check using TypeScript (if applicable)
+  - id: typecheck
+    run: npx tsc --noEmit
+    severity: warning
+    suggestion: "Run 'npx tsc --noEmit' to check for TypeScript errors"
+    timeout: 30s
+
+  # Unit tests
+  - id: test
+    run: npm test -- --coverage --passWithNoTests
+    severity: error
+    suggestion: "Run 'npm test' to diagnose test failures"
+    timeout: 60s
+    requires:
+      - lint
+
+  # Test coverage validation
+  - id: coverage
+    run: npm test -- --coverage --json --outputFile=coverage.json && cat coverage.json
+    grok:
+      - total.*coveredPercent[^:]*:\s*%{NUMBER:coverage}
+    assert: "coverage >= {{.min_coverage}}"
+    severity: warning
+    suggestion: "Code coverage is below {{.min_coverage}}%. Increase test coverage."
+    timeout: 60s
+    requires:
+      - test
+
+  # Build check
+  - id: build
+    run: npm run build
+    severity: error
+    suggestion: "Run 'npm run build' to diagnose build errors"
+    timeout: 60s
+    requires:
+      - typecheck
