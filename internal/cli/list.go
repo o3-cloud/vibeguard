@@ -2,8 +2,11 @@ package cli
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
+
+	"github.com/vibeguard/vibeguard/internal/config"
 )
 
 var listCmd = &cobra.Command{
@@ -20,8 +23,30 @@ func init() {
 }
 
 func runList(cmd *cobra.Command, args []string) error {
-	// TODO: Implement list command
-	// This will be implemented in subsequent tasks
-	fmt.Println("Listing configured checks...")
+	// Load configuration
+	cfg, err := config.Load(configFile)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Checks (%d):\n\n", len(cfg.Checks))
+
+	for _, check := range cfg.Checks {
+		fmt.Printf("  %s\n", check.ID)
+
+		if verbose {
+			fmt.Printf("    Command:  %s\n", check.Run)
+			fmt.Printf("    Severity: %s\n", check.Severity)
+			fmt.Printf("    Timeout:  %s\n", check.Timeout.AsDuration())
+			if len(check.Requires) > 0 {
+				fmt.Printf("    Requires: %s\n", strings.Join(check.Requires, ", "))
+			}
+			if check.Suggestion != "" {
+				fmt.Printf("    Suggestion: %s\n", check.Suggestion)
+			}
+			fmt.Println()
+		}
+	}
+
 	return nil
 }
