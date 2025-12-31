@@ -33,6 +33,11 @@ Major architectural decisions are documented as Architecture Decision Records (A
   - Provides declarative, composable policy definitions in YAML with transparent dependencies
   - Enables real-world validation of VibeGuard through dogfooding, reducing maintenance burden vs. ad-hoc scripts
 
+- **[ADR-006: Integrate VibeGuard as Git Pre-Commit Hook for Policy Enforcement](docs/adr/ADR-006-integrate-vibeguard-as-claude-code-hook.md)**
+  - Decision to use git pre-commit hooks for automated policy enforcement
+  - Standard, universal mechanism that works with any editor or development tool
+  - Catches policy violations before code is committed without tool-specific dependencies
+
 ## Project Skills
 
 The `.claude/skills/` directory contains Claude Code skills that automate common workflows:
