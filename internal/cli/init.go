@@ -4,14 +4,17 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 
+	"github.com/vibeguard/vibeguard/internal/cli/templates"
 	"github.com/vibeguard/vibeguard/internal/config"
 )
 
 var (
-	initForce bool
+	initForce    bool
+	initTemplate string
 )
 
 var initCmd = &cobra.Command{
@@ -19,13 +22,20 @@ var initCmd = &cobra.Command{
 	Short: "Create a starter vibeguard.yaml",
 	Long: `Create a starter configuration file in the current directory.
 
-The generated file includes common checks for Go projects as a starting point.
+Use --template to select a predefined template:
+  vibeguard init --template list          List available templates
+  vibeguard init --template go-standard   Use the Go standard template
+
+Available templates: ` + strings.Join(templates.Names(), ", ") + `
+
+Without --template, creates a default Go project configuration.
 Use --force to overwrite an existing configuration file.`,
 	RunE: runInit,
 }
 
 func init() {
 	initCmd.Flags().BoolVarP(&initForce, "force", "f", false, "Overwrite existing config file")
+	initCmd.Flags().StringVarP(&initTemplate, "template", "t", "", "Use a predefined template (use 'list' to see available templates)")
 	rootCmd.AddCommand(initCmd)
 }
 
@@ -67,6 +77,29 @@ checks:
 `
 
 func runInit(cmd *cobra.Command, args []string) error {
+	// Handle --template list
+	if initTemplate == "list" {
+		return listTemplates()
+	}
+
+	// Determine which content to use (validate template early)
+	var content string
+	var templateName string
+
+	if initTemplate != "" {
+		// Use specified template
+		tmpl, err := templates.Get(initTemplate)
+		if err != nil {
+			return fmt.Errorf("unknown template %q (use --template list to see available templates)", initTemplate)
+		}
+		content = tmpl.Content
+		templateName = tmpl.Name
+	} else {
+		// Use default starter config
+		content = starterConfig
+		templateName = "default (Go)"
+	}
+
 	configPath := "vibeguard.yaml"
 
 	// Check if any config file already exists
@@ -78,24 +111,29 @@ func runInit(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Check if the file exists and --force is set
-	if !initForce {
-		if _, err := os.Stat(configPath); err == nil {
-			return fmt.Errorf("configuration file %q already exists (use --force to overwrite)", configPath)
-		}
-	}
-
-	// Write the starter config
-	if err := os.WriteFile(configPath, []byte(starterConfig), 0644); err != nil {
+	// Write the config
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
 		return fmt.Errorf("failed to create config file: %w", err)
 	}
 
 	absPath, _ := filepath.Abs(configPath)
-	fmt.Printf("Created %s\n", absPath)
+	fmt.Printf("Created %s (template: %s)\n", absPath, templateName)
 	fmt.Println("\nNext steps:")
 	fmt.Println("  1. Review and customize the checks in vibeguard.yaml")
 	fmt.Println("  2. Run 'vibeguard check' to execute all checks")
 	fmt.Println("  3. Run 'vibeguard validate' to verify your configuration")
 
+	return nil
+}
+
+func listTemplates() error {
+	tmplList := templates.List()
+	fmt.Println("Available templates:")
+	fmt.Println()
+	for _, t := range tmplList {
+		fmt.Printf("  %-20s %s\n", t.Name, t.Description)
+	}
+	fmt.Println()
+	fmt.Println("Usage: vibeguard init --template <name>")
 	return nil
 }
