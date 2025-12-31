@@ -151,3 +151,47 @@ func TestFormatJSON_DurationInMilliseconds(t *testing.T) {
 		t.Errorf("expected duration_ms 1500, got %d", output.Checks[0].DurationMS)
 	}
 }
+
+func TestFormatJSON_CancelledStatus(t *testing.T) {
+	var buf bytes.Buffer
+
+	result := &orchestrator.RunResult{
+		Results: []*orchestrator.CheckResult{
+			{
+				Check:     &config.Check{ID: "fmt"},
+				Execution: &executor.Result{Duration: 100 * time.Millisecond},
+				Passed:    true,
+			},
+			{
+				Check:     &config.Check{ID: "vet"},
+				Execution: &executor.Result{Duration: 250 * time.Millisecond, Cancelled: true},
+				Passed:    false,
+			},
+		},
+		Violations: nil,
+		ExitCode:   executor.ExitCodeTimeout,
+	}
+
+	err := FormatJSON(&buf, result)
+	if err != nil {
+		t.Fatalf("FormatJSON failed: %v", err)
+	}
+
+	var output JSONOutput
+	if err := json.Unmarshal(buf.Bytes(), &output); err != nil {
+		t.Fatalf("failed to unmarshal output: %v", err)
+	}
+
+	if len(output.Checks) != 2 {
+		t.Errorf("expected 2 checks, got %d", len(output.Checks))
+	}
+	if output.Checks[0].ID != "fmt" || output.Checks[0].Status != "passed" {
+		t.Errorf("unexpected check[0]: %+v", output.Checks[0])
+	}
+	if output.Checks[1].ID != "vet" || output.Checks[1].Status != "cancelled" {
+		t.Errorf("expected check[1] status to be 'cancelled', got: %+v", output.Checks[1])
+	}
+	if output.ExitCode != executor.ExitCodeTimeout {
+		t.Errorf("expected exit code %d, got %d", executor.ExitCodeTimeout, output.ExitCode)
+	}
+}
