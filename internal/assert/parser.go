@@ -7,13 +7,17 @@ import (
 // Parser parses assertion expressions into an AST.
 type Parser struct {
 	lexer *Lexer
+	input string // Original input for error context
 	cur   Token
 	peek  Token
 }
 
 // NewParser creates a new Parser for the given input.
 func NewParser(input string) *Parser {
-	p := &Parser{lexer: NewLexer(input)}
+	p := &Parser{
+		lexer: NewLexer(input),
+		input: input,
+	}
 	// Initialize cur and peek tokens
 	p.nextToken()
 	p.nextToken()
@@ -24,6 +28,17 @@ func NewParser(input string) *Parser {
 func (p *Parser) nextToken() {
 	p.cur = p.peek
 	p.peek = p.lexer.NextToken()
+}
+
+// formatError creates an error message with context showing where in the expression the error occurred.
+func (p *Parser) formatError(pos int, msg string) string {
+	// Build a pointer line showing where the error is
+	pointer := ""
+	for i := 0; i < pos-1 && i < len(p.input); i++ {
+		pointer += " "
+	}
+	pointer += "^"
+	return fmt.Sprintf("%s\n  %s\n  %s", msg, p.input, pointer)
 }
 
 // Parse parses the input and returns the AST.
@@ -98,7 +113,8 @@ func (p *Parser) parsePrefix() (Expr, error) {
 	case TokenMinus:
 		return p.parseUnary()
 	default:
-		return nil, fmt.Errorf("unexpected token %q at position %d", p.cur.Literal, p.cur.Pos)
+		msg := fmt.Sprintf("unexpected token %q at position %d", p.cur.Literal, p.cur.Pos)
+		return nil, fmt.Errorf("%s", p.formatError(p.cur.Pos, msg))
 	}
 }
 
@@ -138,7 +154,8 @@ func (p *Parser) parseParen() (Expr, error) {
 		return nil, err
 	}
 	if p.cur.Type != TokenRParen {
-		return nil, fmt.Errorf("expected ')' at position %d, got %q", p.cur.Pos, p.cur.Literal)
+		msg := fmt.Sprintf("expected ')' at position %d, got %q", p.cur.Pos, p.cur.Literal)
+		return nil, fmt.Errorf("%s", p.formatError(p.cur.Pos, msg))
 	}
 	p.nextToken() // consume ')'
 	return &ParenExpr{Inner: inner}, nil

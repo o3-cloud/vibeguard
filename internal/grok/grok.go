@@ -54,7 +54,13 @@ func (m *Matcher) Match(input string) (map[string]string, error) {
 	for i, g := range m.compiled {
 		values, err := g.ParseString(input)
 		if err != nil {
-			return nil, fmt.Errorf("grok pattern %d failed to parse: %w", i, err)
+			pattern := m.patterns[i]
+			// Truncate output for readability if too long
+			output := input
+			if len(output) > 100 {
+				output = output[:97] + "..."
+			}
+			return nil, fmt.Errorf("grok pattern %d failed to parse\n  pattern: %q\n  output: %q\n  error: %w", i, pattern, output, err)
 		}
 		// Merge extracted values into result
 		for k, v := range values {

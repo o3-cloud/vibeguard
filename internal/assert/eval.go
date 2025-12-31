@@ -74,12 +74,12 @@ func (e *Evaluator) Eval(expr string, vars map[string]string) (bool, error) {
 	parser := NewParser(expr)
 	ast, err := parser.Parse()
 	if err != nil {
-		return false, fmt.Errorf("parse error: %w", err)
+		return false, fmt.Errorf("parse error in assertion %q: %w", expr, err)
 	}
 
 	result, err := e.eval(ast, vars)
 	if err != nil {
-		return false, fmt.Errorf("eval error: %w", err)
+		return false, fmt.Errorf("eval error in assertion %q: %w", expr, err)
 	}
 
 	return result.AsBool(), nil
@@ -139,7 +139,7 @@ func (e *Evaluator) evalUnary(expr *UnaryExpr, vars map[string]string) (Value, e
 	case TokenMinus:
 		f, ok := right.AsFloat()
 		if !ok {
-			return Value{}, fmt.Errorf("cannot negate non-numeric value: %s", right.raw)
+			return Value{}, fmt.Errorf("cannot negate non-numeric value %q (operator: -%s)", right.raw, right.raw)
 		}
 		return NewValue(formatFloat(-f)), nil
 
@@ -231,7 +231,7 @@ func (e *Evaluator) evalArithmetic(left, right Value, op func(a, b float64) floa
 	rf, rok := right.AsFloat()
 
 	if !lok || !rok {
-		return Value{}, fmt.Errorf("arithmetic requires numeric operands: %s and %s", left.raw, right.raw)
+		return Value{}, fmt.Errorf("arithmetic requires numeric operands, got left=%q right=%q", left.raw, right.raw)
 	}
 
 	result := op(lf, rf)
