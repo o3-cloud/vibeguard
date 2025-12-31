@@ -53,6 +53,31 @@ vibeguard check fmt
 go test -v ./...
 ```
 
+### AI-Assisted Setup
+
+VibeGuard includes an AI-assisted setup feature that helps AI coding agents (Claude Code, Cursor, etc.) generate project-specific configurations automatically.
+
+```bash
+vibeguard init --assist
+```
+
+This command analyzes your project and generates a comprehensive setup guide that AI agents can use to create a valid `vibeguard.yaml` configuration. The guide includes:
+
+- Detected project type (Go, Node.js, Python, Rust, Ruby, Java)
+- Existing tools and their configuration files
+- Recommended checks based on detected tools
+- Project structure analysis
+- Configuration syntax and validation rules
+
+**Usage with Claude Code:**
+
+1. Run `vibeguard init --assist` in your project directory
+2. Copy the generated prompt to Claude Code
+3. The AI agent will generate a customized `vibeguard.yaml`
+4. Review and commit the configuration
+
+For detailed documentation, see [AI-Assisted Setup Guide](docs/ai-assisted-setup.md).
+
 ## CLI Reference
 
 ### Global Flags
@@ -88,7 +113,15 @@ Create a starter configuration file in the current directory.
 ```bash
 vibeguard init              # Create vibeguard.yaml if it doesn't exist
 vibeguard init --force      # Overwrite existing configuration file
+vibeguard init --assist     # Generate AI setup guide for this project
+vibeguard init --assist -o guide.txt  # Save guide to a file
 ```
+
+| Flag | Short | Description | Default |
+|------|-------|-------------|---------|
+| `--force` | `-f` | Overwrite existing config file | false |
+| `--assist` | | Generate AI agent setup guide | false |
+| `--output` | `-o` | Output file for --assist (default: stdout) | stdout |
 
 #### `vibeguard list`
 
@@ -226,6 +259,7 @@ vibeguard/
 │   └── vibeguard/              # Main CLI application
 ├── internal/
 │   ├── cli/                    # Command-line interface (Cobra-based)
+│   │   └── inspector/          # AI-assisted setup (project analysis, recommendations)
 │   ├── config/                 # Configuration loading and validation
 │   ├── judge/                  # Judge API integration
 │   ├── policy/                 # Policy evaluation engine

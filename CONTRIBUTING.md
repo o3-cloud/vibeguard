@@ -260,6 +260,122 @@ Example:
 - Document configuration changes in `README.md#configuration-schema`
 - Update CONVENTIONS.md if changing code style guidelines
 
+## AI-Assisted Setup Development
+
+The `--assist` feature uses the inspector package to analyze projects and generate AI-friendly setup guides.
+
+### Inspector Package Structure
+
+```
+internal/cli/inspector/
+├── detector.go         # Project type detection
+├── tools.go            # Tool scanning (linters, formatters, etc.)
+├── metadata.go         # Metadata and structure extraction
+├── recommendations.go  # Check recommendation generation
+└── *_test.go          # Comprehensive tests for each component
+```
+
+### Adding Support for New Tools
+
+To add detection for a new tool:
+
+1. **Add to tools.go:**
+   ```go
+   // In the appropriate scan function (e.g., scanGoTools)
+   if exists(".newtool.yml") || exists(".newtool.yaml") {
+       tools = append(tools, ToolInfo{
+           Name:       "newtool",
+           Category:   CategoryLinter,
+           Detected:   true,
+           ConfigFile: ".newtool.yml",
+           Confidence: 0.9,
+           Indicators: []string{".newtool.yml config found"},
+       })
+   }
+   ```
+
+2. **Add check template in recommendations.go:**
+   ```go
+   var newtoolCheck = CheckRecommendation{
+       ID:          "newtool",
+       Description: "Run newtool analysis",
+       Rationale:   "Newtool catches common issues...",
+       Command:     "newtool check ./...",
+       Severity:    "error",
+       Suggestion:  "Fix newtool issues",
+       Category:    "lint",
+       Tool:        "newtool",
+       Priority:    20,
+   }
+   ```
+
+3. **Add tests in tools_test.go and recommendations_test.go**
+
+### Adding Support for New Project Types
+
+To add detection for a new language/framework:
+
+1. **Add type constant in detector.go:**
+   ```go
+   const (
+       ProjectTypeNewLang ProjectType = "newlang"
+   )
+   ```
+
+2. **Add detection logic in detector.go:**
+   ```go
+   func (d *Detector) detectNewLang() DetectionResult {
+       confidence := 0.0
+       indicators := []string{}
+
+       if d.exists("newlang.config") {
+           confidence += 0.6
+           indicators = append(indicators, "newlang.config found")
+       }
+       // ... more detection logic
+
+       return DetectionResult{
+           Type:       ProjectTypeNewLang,
+           Confidence: min(confidence, 1.0),
+           Indicators: indicators,
+       }
+   }
+   ```
+
+3. **Add tool scanning in tools.go**
+
+4. **Add check templates in recommendations.go**
+
+5. **Add comprehensive tests**
+
+### Testing AI-Assisted Setup
+
+Run the inspector tests:
+
+```bash
+# Unit tests
+go test -v ./internal/cli/inspector/...
+
+# Integration tests with real projects
+go test -v ./internal/cli/inspector/... -run Integration
+
+# Test prompt generation
+go test -v ./internal/cli/inspector/... -run TestGenerateSetupPrompt
+```
+
+### Example: Testing with a Real Project
+
+```bash
+# Clone a test project
+git clone https://github.com/example/project /tmp/test-project
+
+# Run inspector analysis
+cd /tmp/test-project
+vibeguard init --assist --verbose
+
+# Review the generated guide
+```
+
 ## Performance Considerations
 
 - Minimize allocations in hot paths
