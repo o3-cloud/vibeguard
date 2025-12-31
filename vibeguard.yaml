@@ -18,8 +18,8 @@ checks:
 
   - id: lint
     run: golangci-lint run {{.go_packages}}
-    severity: error
-    suggestion: "Run 'golangci-lint run' and fix reported issues"
+    severity: warning
+    suggestion: "Install golangci-lint and run 'golangci-lint run' to fix reported issues"
     timeout: 120s
 
   - id: test
