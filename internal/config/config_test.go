@@ -919,3 +919,84 @@ checks: []
 		}
 	})
 }
+
+func TestLoad_ConfigErrorWithLineNumbers(t *testing.T) {
+	// Test that validation errors include line numbers
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "vibeguard.yaml")
+
+	// Create a config with a duplicate check ID at line 7
+	content := `version: "1"
+checks:
+  - id: test
+    run: go test ./...
+  - id: test
+    run: go vet ./...
+`
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Load(configPath)
+	if err == nil {
+		t.Fatal("expected error for duplicate check id")
+	}
+
+	configErr, ok := err.(*ConfigError)
+	if !ok {
+		t.Fatalf("expected ConfigError, got: %T", err)
+	}
+
+	// Check that line number is present
+	if configErr.LineNum == 0 {
+		t.Error("expected non-zero line number for duplicate check error")
+	}
+
+	// Check that error message includes line number
+	errMsg := configErr.Error()
+	if !strings.Contains(errMsg, "line") {
+		t.Errorf("expected error message to include 'line', got: %s", errMsg)
+	}
+}
+
+func TestLoad_CyclicDependencyWithLineNumbers(t *testing.T) {
+	// Test that cyclic dependency errors include line numbers
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "vibeguard.yaml")
+
+	content := `version: "1"
+checks:
+  - id: a
+    run: echo a
+    requires:
+      - b
+  - id: b
+    run: echo b
+    requires:
+      - a
+`
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Load(configPath)
+	if err == nil {
+		t.Fatal("expected error for cyclic dependency")
+	}
+
+	configErr, ok := err.(*ConfigError)
+	if !ok {
+		t.Fatalf("expected ConfigError, got: %T", err)
+	}
+
+	// Check that line number is present
+	if configErr.LineNum == 0 {
+		t.Error("expected non-zero line number for cyclic dependency error")
+	}
+
+	// Check that error message includes line number
+	errMsg := configErr.Error()
+	if !strings.Contains(errMsg, "line") {
+		t.Errorf("expected error message to include 'line', got: %s", errMsg)
+	}
+}

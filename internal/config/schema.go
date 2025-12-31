@@ -8,6 +8,8 @@ type Config struct {
 	Version string            `yaml:"version"`
 	Vars    map[string]string `yaml:"vars"`
 	Checks  []Check           `yaml:"checks"`
+	// yamlRoot stores the parsed YAML node tree for line number lookups (not exported)
+	yamlRoot interface{} `yaml:"-"`
 }
 
 // Check represents a single check to execute.

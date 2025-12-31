@@ -11,15 +11,23 @@ import (
 
 // ConfigError represents a configuration error that should result in exit code 2.
 type ConfigError struct {
-	Message string
-	Cause   error
+	Message  string
+	Cause    error
+	LineNum  int    // Line number in the config file (0 if not available)
+	FileName string // File name for reference (optional)
 }
 
 func (e *ConfigError) Error() string {
+	var msg string
 	if e.Cause != nil {
-		return fmt.Sprintf("%s: %v", e.Message, e.Cause)
+		msg = fmt.Sprintf("%s: %v", e.Message, e.Cause)
+	} else {
+		msg = e.Message
 	}
-	return e.Message
+	if e.LineNum > 0 {
+		msg = fmt.Sprintf("%s (line %d)", msg, e.LineNum)
+	}
+	return msg
 }
 
 func (e *ConfigError) Unwrap() error {
@@ -49,17 +57,26 @@ func Load(path string) (*Config, error) {
 		return nil, &ConfigError{Message: "failed to read config file", Cause: err}
 	}
 
-	var cfg Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
+	// Parse with nodes to preserve line information
+	var root yaml.Node
+	if err := yaml.Unmarshal(data, &root); err != nil {
 		return nil, &ConfigError{Message: "failed to parse config file", Cause: err}
 	}
+
+	var cfg Config
+	if err := root.Decode(&cfg); err != nil {
+		return nil, &ConfigError{Message: "failed to parse config file", Cause: err}
+	}
+
+	// Store the root node for line number lookups during validation
+	cfg.yamlRoot = &root
 
 	// Apply defaults
 	cfg.applyDefaults()
 
 	// Validate configuration
 	if err := cfg.Validate(); err != nil {
-		return nil, &ConfigError{Message: "configuration validation failed", Cause: err}
+		return nil, err
 	}
 
 	// Interpolate variables
@@ -100,37 +117,52 @@ func (c *Config) applyDefaults() {
 // Validate checks the configuration for errors.
 func (c *Config) Validate() error {
 	if c.Version != "1" {
-		return fmt.Errorf("unsupported config version: %s", c.Version)
+		return &ConfigError{Message: fmt.Sprintf("unsupported config version: %s", c.Version)}
 	}
 
 	if len(c.Checks) == 0 {
-		return fmt.Errorf("no checks defined")
+		return &ConfigError{Message: "no checks defined"}
 	}
 
 	checkIDs := make(map[string]bool)
 	for i, check := range c.Checks {
 		if check.ID == "" {
-			return fmt.Errorf("check at index %d has no id", i)
+			return &ConfigError{
+				Message: fmt.Sprintf("check at index %d has no id", i),
+				LineNum: c.findCheckNodeLine("", i),
+			}
 		}
 		if checkIDs[check.ID] {
-			return fmt.Errorf("duplicate check id: %s", check.ID)
+			return &ConfigError{
+				Message: fmt.Sprintf("duplicate check id: %s", check.ID),
+				LineNum: c.findCheckNodeLine(check.ID, i),
+			}
 		}
 		checkIDs[check.ID] = true
 
 		if check.Run == "" {
-			return fmt.Errorf("check %q has no run command", check.ID)
+			return &ConfigError{
+				Message: fmt.Sprintf("check %q has no run command", check.ID),
+				LineNum: c.findCheckNodeLine(check.ID, i),
+			}
 		}
 
 		// Validate severity
 		if check.Severity != SeverityError && check.Severity != SeverityWarning {
-			return fmt.Errorf("check %q has invalid severity: %s", check.ID, check.Severity)
+			return &ConfigError{
+				Message: fmt.Sprintf("check %q has invalid severity: %s", check.ID, check.Severity),
+				LineNum: c.findCheckNodeLine(check.ID, i),
+			}
 		}
 
 		// Validate requires references
 		for _, reqID := range check.Requires {
 			// Check for self-reference
 			if reqID == check.ID {
-				return fmt.Errorf("check %q cannot require itself", check.ID)
+				return &ConfigError{
+					Message: fmt.Sprintf("check %q cannot require itself", check.ID),
+					LineNum: c.findCheckNodeLine(check.ID, i),
+				}
 			}
 
 			if !checkIDs[reqID] {
@@ -143,7 +175,10 @@ func (c *Config) Validate() error {
 					}
 				}
 				if !found {
-					return fmt.Errorf("check %q requires unknown check: %s", check.ID, reqID)
+					return &ConfigError{
+						Message: fmt.Sprintf("check %q requires unknown check: %s", check.ID, reqID),
+						LineNum: c.findCheckNodeLine(check.ID, i),
+					}
 				}
 			}
 		}
@@ -161,9 +196,12 @@ func (c *Config) Validate() error {
 // It uses DFS with three states: unvisited, visiting (in current path), and visited (fully processed).
 func (c *Config) validateNoCycles() error {
 	// Build adjacency list: check ID -> list of required check IDs
+	// Also build a map of check ID to index for line number lookup
 	graph := make(map[string][]string)
-	for _, check := range c.Checks {
+	idToIndex := make(map[string]int)
+	for i, check := range c.Checks {
 		graph[check.ID] = check.Requires
+		idToIndex[check.ID] = i
 	}
 
 	// Track visited state: 0 = unvisited, 1 = visiting (in current path), 2 = visited
@@ -189,7 +227,12 @@ func (c *Config) validateNoCycles() error {
 				}
 			}
 			cyclePath := append(path[cycleStart:], id)
-			return fmt.Errorf("cyclic dependency detected: %s", formatCycle(cyclePath))
+			// Get line number of the first check in the cycle
+			lineNum := c.findCheckNodeLine(cyclePath[0], idToIndex[cyclePath[0]])
+			return &ConfigError{
+				Message: fmt.Sprintf("cyclic dependency detected: %s", formatCycle(cyclePath)),
+				LineNum: lineNum,
+			}
 		}
 
 		// Mark as visiting
@@ -228,6 +271,47 @@ func formatCycle(path []string) string {
 		result += " -> " + path[i]
 	}
 	return result
+}
+
+// findCheckNodeLine returns the line number of a check in the YAML, or 0 if not found.
+func (c *Config) findCheckNodeLine(checkID string, checkIndex int) int {
+	root, ok := c.yamlRoot.(*yaml.Node)
+	if !ok || root == nil {
+		return 0
+	}
+
+	// When unmarshaling into a Node, the root is a DocumentNode (Kind 1)
+	// and its first Content element is the actual mapping
+	var mapping *yaml.Node
+	if root.Kind == yaml.DocumentNode && len(root.Content) > 0 {
+		mapping = root.Content[0]
+	} else if root.Kind == yaml.MappingNode {
+		mapping = root
+	} else {
+		return 0
+	}
+
+	if mapping.Kind != yaml.MappingNode {
+		return 0
+	}
+
+	for i := 0; i < len(mapping.Content); i += 2 {
+		if i+1 >= len(mapping.Content) {
+			break
+		}
+		keyNode := mapping.Content[i]
+		valueNode := mapping.Content[i+1]
+
+		if keyNode.Value == "checks" && valueNode.Kind == yaml.SequenceNode {
+			// Found the checks sequence, get the check at the given index
+			if checkIndex >= 0 && checkIndex < len(valueNode.Content) {
+				return valueNode.Content[checkIndex].Line
+			}
+			break
+		}
+	}
+
+	return 0
 }
 
 // UnmarshalYAML implements custom YAML unmarshaling for GrokSpec.
