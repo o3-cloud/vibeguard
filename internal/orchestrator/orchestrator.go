@@ -9,6 +9,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/vibeguard/vibeguard/internal/assert"
 	"github.com/vibeguard/vibeguard/internal/config"
 	"github.com/vibeguard/vibeguard/internal/executor"
 	"github.com/vibeguard/vibeguard/internal/grok"
@@ -200,9 +201,16 @@ func (o *Orchestrator) Run(ctx context.Context) (*RunResult, error) {
 					}
 				}
 
-				// For Phase 1, pass/fail is based on exit code only
-				// Phase 2 will add assertion evaluation using extracted values
+				// Determine pass/fail based on exit code and assertion (if specified)
 				passed := execResult.Success
+				if passed && check.Assert != "" {
+					evaluator := assert.New()
+					assertPassed, assertErr := evaluator.Eval(check.Assert, extracted)
+					if assertErr != nil {
+						return assertErr
+					}
+					passed = assertPassed
+				}
 
 				result := &CheckResult{
 					Check:     check,
@@ -345,7 +353,17 @@ func (o *Orchestrator) RunCheck(ctx context.Context, checkID string) (*RunResult
 		}
 	}
 
+	// Determine pass/fail based on exit code and assertion (if specified)
 	passed := execResult.Success
+	if passed && check.Assert != "" {
+		evaluator := assert.New()
+		assertPassed, assertErr := evaluator.Eval(check.Assert, extracted)
+		if assertErr != nil {
+			return nil, assertErr
+		}
+		passed = assertPassed
+	}
+
 	result := &CheckResult{
 		Check:     check,
 		Execution: execResult,
