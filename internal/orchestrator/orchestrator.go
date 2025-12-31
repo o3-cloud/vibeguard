@@ -62,64 +62,115 @@ func New(cfg *config.Config, exec *executor.Executor, maxParallel int, failFast,
 func (o *Orchestrator) Run(ctx context.Context) (*RunResult, error) {
 	start := time.Now()
 
-	// TODO: Implement dependency graph and parallel execution
-	// For now, execute checks sequentially
+	// Build dependency graph to determine execution order
+	graph, err := BuildGraph(o.config.Checks)
+	if err != nil {
+		return nil, err
+	}
+
+	// Build lookup map for checks by ID
+	checkByID := make(map[string]*config.Check)
+	for i := range o.config.Checks {
+		checkByID[o.config.Checks[i].ID] = &o.config.Checks[i]
+	}
 
 	results := make([]*CheckResult, 0, len(o.config.Checks))
 	violations := make([]*Violation, 0)
 
-	for i := range o.config.Checks {
-		check := &o.config.Checks[i]
+	// Track which checks have passed (for dependency validation)
+	passedChecks := make(map[string]bool)
 
-		// Apply timeout
-		checkCtx := ctx
-		if check.Timeout > 0 {
+	// Execute checks level by level (topological order)
+	// Within each level, checks can be run in parallel (future: vibeguard-v3m.3)
+	// For now, execute sequentially within each level
+	for _, level := range graph.Levels() {
+		for _, checkID := range level {
+			check := checkByID[checkID]
+
+			// Verify all dependencies passed (fail-fast may have stopped a dependency)
+			allDepsPassed := true
+			for _, depID := range check.Requires {
+				if !passedChecks[depID] {
+					allDepsPassed = false
+					break
+				}
+			}
+
+			// Skip this check if a required dependency failed
+			if !allDepsPassed {
+				result := &CheckResult{
+					Check:  check,
+					Passed: false,
+					Execution: &executor.Result{
+						CheckID:  checkID,
+						ExitCode: -1,
+						Success:  false,
+					},
+					Extracted: make(map[string]string),
+				}
+				results = append(results, result)
+
+				violation := &Violation{
+					CheckID:    check.ID,
+					Severity:   check.Severity,
+					Command:    check.Run,
+					Suggestion: "Skipped: required dependency failed",
+					Extracted:  result.Extracted,
+				}
+				violations = append(violations, violation)
+				continue
+			}
+
+			// Apply timeout
+			checkCtx := ctx
 			var cancel context.CancelFunc
-			checkCtx, cancel = context.WithTimeout(ctx, check.Timeout.AsDuration())
-			defer cancel()
-		}
-
-		// Execute the check
-		execResult, err := o.executor.Execute(checkCtx, check.ID, check.Run)
-		if err != nil {
-			// Execution error (not just non-zero exit)
-			return nil, err
-		}
-
-		// For Phase 1, pass/fail is based on exit code only
-		// Grok/assert will be added in Phase 2
-		passed := execResult.Success
-
-		result := &CheckResult{
-			Check:     check,
-			Execution: execResult,
-			Passed:    passed,
-			Extracted: make(map[string]string),
-		}
-		results = append(results, result)
-
-		if !passed {
-			violation := &Violation{
-				CheckID:    check.ID,
-				Severity:   check.Severity,
-				Command:    check.Run,
-				Suggestion: check.Suggestion,
-				Extracted:  result.Extracted,
+			if check.Timeout > 0 {
+				checkCtx, cancel = context.WithTimeout(ctx, check.Timeout.AsDuration())
 			}
-			violations = append(violations, violation)
 
-			if o.failFast {
-				break
+			// Execute the check
+			execResult, execErr := o.executor.Execute(checkCtx, check.ID, check.Run)
+			if cancel != nil {
+				cancel()
 			}
-		}
-	}
+			if execErr != nil {
+				// Execution error (not just non-zero exit)
+				return nil, execErr
+			}
 
-	// Determine exit code
-	exitCode := 0
-	for _, v := range violations {
-		if v.Severity == config.SeverityError {
-			exitCode = 1
-			break
+			// For Phase 1, pass/fail is based on exit code only
+			// Grok/assert will be added in Phase 2
+			passed := execResult.Success
+			passedChecks[checkID] = passed
+
+			result := &CheckResult{
+				Check:     check,
+				Execution: execResult,
+				Passed:    passed,
+				Extracted: make(map[string]string),
+			}
+			results = append(results, result)
+
+			if !passed {
+				violation := &Violation{
+					CheckID:    check.ID,
+					Severity:   check.Severity,
+					Command:    check.Run,
+					Suggestion: check.Suggestion,
+					Extracted:  result.Extracted,
+				}
+				violations = append(violations, violation)
+
+				if o.failFast {
+					// Return early, remaining checks won't be executed
+					return &RunResult{
+						Results:    results,
+						Violations: violations,
+						Duration:   time.Since(start),
+						ExitCode:   o.calculateExitCode(violations),
+					}, nil
+				}
+			}
 		}
 	}
 
@@ -127,8 +178,18 @@ func (o *Orchestrator) Run(ctx context.Context) (*RunResult, error) {
 		Results:    results,
 		Violations: violations,
 		Duration:   time.Since(start),
-		ExitCode:   exitCode,
+		ExitCode:   o.calculateExitCode(violations),
 	}, nil
+}
+
+// calculateExitCode determines the exit code based on violations.
+func (o *Orchestrator) calculateExitCode(violations []*Violation) int {
+	for _, v := range violations {
+		if v.Severity == config.SeverityError {
+			return 1
+		}
+	}
+	return 0
 }
 
 // RunCheck executes a single check by ID.

@@ -401,3 +401,471 @@ func TestNew_DefaultMaxParallel(t *testing.T) {
 		t.Errorf("expected default max parallel %d, got %d", config.DefaultParallel, orch.maxParallel)
 	}
 }
+
+// Tests for topological sort execution ordering (vibeguard-v3m.2)
+
+func TestRun_WithDependencies_ExecutesInOrder(t *testing.T) {
+	// Create a temp file to track execution order
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{
+				ID:       "step1",
+				Run:      "echo step1",
+				Severity: config.SeverityError,
+			},
+			{
+				ID:       "step2",
+				Run:      "echo step2",
+				Severity: config.SeverityError,
+				Requires: []string{"step1"},
+			},
+			{
+				ID:       "step3",
+				Run:      "echo step3",
+				Severity: config.SeverityError,
+				Requires: []string{"step2"},
+			},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 1, false, false)
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.ExitCode != 0 {
+		t.Errorf("expected exit code 0, got %d", result.ExitCode)
+	}
+	if len(result.Results) != 3 {
+		t.Fatalf("expected 3 results, got %d", len(result.Results))
+	}
+
+	// Verify execution order: step1 -> step2 -> step3
+	expectedOrder := []string{"step1", "step2", "step3"}
+	for i, expected := range expectedOrder {
+		if result.Results[i].Check.ID != expected {
+			t.Errorf("expected result %d to be %q, got %q", i, expected, result.Results[i].Check.ID)
+		}
+	}
+}
+
+func TestRun_DiamondDependency_ExecutesInCorrectOrder(t *testing.T) {
+	// Diamond pattern:
+	//     a
+	//    / \
+	//   b   c
+	//    \ /
+	//     d
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{
+				ID:       "a",
+				Run:      "echo a",
+				Severity: config.SeverityError,
+			},
+			{
+				ID:       "b",
+				Run:      "echo b",
+				Severity: config.SeverityError,
+				Requires: []string{"a"},
+			},
+			{
+				ID:       "c",
+				Run:      "echo c",
+				Severity: config.SeverityError,
+				Requires: []string{"a"},
+			},
+			{
+				ID:       "d",
+				Run:      "echo d",
+				Severity: config.SeverityError,
+				Requires: []string{"b", "c"},
+			},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 1, false, false)
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(result.Results) != 4 {
+		t.Fatalf("expected 4 results, got %d", len(result.Results))
+	}
+
+	// Verify "a" runs first
+	if result.Results[0].Check.ID != "a" {
+		t.Errorf("expected first result to be 'a', got %q", result.Results[0].Check.ID)
+	}
+
+	// "d" must run after both "b" and "c"
+	dIndex := -1
+	bIndex := -1
+	cIndex := -1
+	for i, r := range result.Results {
+		switch r.Check.ID {
+		case "d":
+			dIndex = i
+		case "b":
+			bIndex = i
+		case "c":
+			cIndex = i
+		}
+	}
+
+	if dIndex <= bIndex || dIndex <= cIndex {
+		t.Errorf("'d' should run after 'b' and 'c': d=%d, b=%d, c=%d", dIndex, bIndex, cIndex)
+	}
+}
+
+func TestRun_DependencyFails_SkipsDependent(t *testing.T) {
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{
+				ID:       "first",
+				Run:      "exit 1", // This will fail
+				Severity: config.SeverityError,
+			},
+			{
+				ID:       "second",
+				Run:      "echo should-not-run",
+				Severity: config.SeverityError,
+				Requires: []string{"first"},
+			},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 1, false, false) // failFast = false
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(result.Results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(result.Results))
+	}
+
+	// First check should fail
+	if result.Results[0].Passed {
+		t.Error("expected first check to fail")
+	}
+
+	// Second check should be skipped (marked as failed)
+	if result.Results[1].Passed {
+		t.Error("expected second check to be skipped (failed)")
+	}
+	if result.Results[1].Execution.ExitCode != -1 {
+		t.Errorf("expected exit code -1 for skipped check, got %d", result.Results[1].Execution.ExitCode)
+	}
+
+	// Should have 2 violations
+	if len(result.Violations) != 2 {
+		t.Errorf("expected 2 violations, got %d", len(result.Violations))
+	}
+
+	// Second violation should indicate it was skipped
+	if result.Violations[1].Suggestion != "Skipped: required dependency failed" {
+		t.Errorf("expected skip suggestion, got %q", result.Violations[1].Suggestion)
+	}
+}
+
+func TestRun_MultipleDependenciesOneFails_SkipsDependent(t *testing.T) {
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{
+				ID:       "dep1",
+				Run:      "exit 0",
+				Severity: config.SeverityError,
+			},
+			{
+				ID:       "dep2",
+				Run:      "exit 1", // This fails
+				Severity: config.SeverityError,
+			},
+			{
+				ID:       "dependent",
+				Run:      "echo should-not-run",
+				Severity: config.SeverityError,
+				Requires: []string{"dep1", "dep2"},
+			},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 1, false, false)
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(result.Results) != 3 {
+		t.Fatalf("expected 3 results, got %d", len(result.Results))
+	}
+
+	// Find the dependent result
+	var dependentResult *CheckResult
+	for _, r := range result.Results {
+		if r.Check.ID == "dependent" {
+			dependentResult = r
+			break
+		}
+	}
+
+	if dependentResult == nil {
+		t.Fatal("could not find 'dependent' result")
+	}
+
+	// Should be skipped because dep2 failed
+	if dependentResult.Passed {
+		t.Error("expected 'dependent' to be skipped")
+	}
+	if dependentResult.Execution.ExitCode != -1 {
+		t.Errorf("expected exit code -1 for skipped, got %d", dependentResult.Execution.ExitCode)
+	}
+}
+
+func TestRun_IndependentChecks_AllExecute(t *testing.T) {
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{
+				ID:       "independent1",
+				Run:      "echo a",
+				Severity: config.SeverityError,
+			},
+			{
+				ID:       "independent2",
+				Run:      "echo b",
+				Severity: config.SeverityError,
+			},
+			{
+				ID:       "independent3",
+				Run:      "echo c",
+				Severity: config.SeverityError,
+			},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 1, false, false)
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// All should pass and be in level 0
+	if len(result.Results) != 3 {
+		t.Fatalf("expected 3 results, got %d", len(result.Results))
+	}
+
+	for _, r := range result.Results {
+		if !r.Passed {
+			t.Errorf("expected check %q to pass", r.Check.ID)
+		}
+	}
+}
+
+func TestRun_CyclicDependency_ReturnsError(t *testing.T) {
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{
+				ID:       "a",
+				Run:      "echo a",
+				Severity: config.SeverityError,
+				Requires: []string{"b"},
+			},
+			{
+				ID:       "b",
+				Run:      "echo b",
+				Severity: config.SeverityError,
+				Requires: []string{"a"},
+			},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 1, false, false)
+
+	_, err := orch.Run(context.Background())
+	if err == nil {
+		t.Fatal("expected error for cyclic dependency, got nil")
+	}
+}
+
+func TestRun_UnknownDependency_ReturnsError(t *testing.T) {
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{
+				ID:       "a",
+				Run:      "echo a",
+				Severity: config.SeverityError,
+				Requires: []string{"nonexistent"},
+			},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 1, false, false)
+
+	_, err := orch.Run(context.Background())
+	if err == nil {
+		t.Fatal("expected error for unknown dependency, got nil")
+	}
+}
+
+func TestRun_FailFast_WithDependencies_StopsCorrectly(t *testing.T) {
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{
+				ID:       "first",
+				Run:      "exit 1", // Fails
+				Severity: config.SeverityError,
+			},
+			{
+				ID:       "second",
+				Run:      "echo should-not-run",
+				Severity: config.SeverityError,
+				Requires: []string{"first"},
+			},
+			{
+				ID:       "independent",
+				Run:      "echo also-should-not-run",
+				Severity: config.SeverityError,
+			},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 1, true, false) // failFast = true
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// With fail-fast, should stop after first check fails
+	// But we might still execute independent checks at the same level
+	// In our sequential implementation, we stop immediately
+	if len(result.Results) == 0 {
+		t.Fatal("expected at least 1 result")
+	}
+
+	// First result should be the failing check
+	if result.Results[0].Check.ID != "first" && result.Results[0].Check.ID != "independent" {
+		t.Errorf("unexpected first result: %q", result.Results[0].Check.ID)
+	}
+}
+
+func TestRun_ComplexDependencyGraph_CorrectOrder(t *testing.T) {
+	// Complex graph:
+	//       a
+	//      /|\
+	//     b c d
+	//     |/ \|
+	//     e   f
+	//      \ /
+	//       g
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{ID: "a", Run: "echo a", Severity: config.SeverityError},
+			{ID: "b", Run: "echo b", Severity: config.SeverityError, Requires: []string{"a"}},
+			{ID: "c", Run: "echo c", Severity: config.SeverityError, Requires: []string{"a"}},
+			{ID: "d", Run: "echo d", Severity: config.SeverityError, Requires: []string{"a"}},
+			{ID: "e", Run: "echo e", Severity: config.SeverityError, Requires: []string{"b", "c"}},
+			{ID: "f", Run: "echo f", Severity: config.SeverityError, Requires: []string{"c", "d"}},
+			{ID: "g", Run: "echo g", Severity: config.SeverityError, Requires: []string{"e", "f"}},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 1, false, false)
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(result.Results) != 7 {
+		t.Fatalf("expected 7 results, got %d", len(result.Results))
+	}
+
+	// Build index map for verification
+	indexByID := make(map[string]int)
+	for i, r := range result.Results {
+		indexByID[r.Check.ID] = i
+	}
+
+	// Verify constraints
+	verifyOrder := func(before, after string) {
+		if indexByID[before] >= indexByID[after] {
+			t.Errorf("%q should run before %q: %d >= %d", before, after, indexByID[before], indexByID[after])
+		}
+	}
+
+	verifyOrder("a", "b")
+	verifyOrder("a", "c")
+	verifyOrder("a", "d")
+	verifyOrder("b", "e")
+	verifyOrder("c", "e")
+	verifyOrder("c", "f")
+	verifyOrder("d", "f")
+	verifyOrder("e", "g")
+	verifyOrder("f", "g")
+}
+
+func TestRun_DependencyChain_MiddleFails_SkipsDownstream(t *testing.T) {
+	// Chain: a -> b -> c -> d
+	// b fails, so c and d should be skipped
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{ID: "a", Run: "exit 0", Severity: config.SeverityError},
+			{ID: "b", Run: "exit 1", Severity: config.SeverityError, Requires: []string{"a"}}, // fails
+			{ID: "c", Run: "echo c", Severity: config.SeverityError, Requires: []string{"b"}},
+			{ID: "d", Run: "echo d", Severity: config.SeverityError, Requires: []string{"c"}},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 1, false, false)
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(result.Results) != 4 {
+		t.Fatalf("expected 4 results, got %d", len(result.Results))
+	}
+
+	// Count skipped checks (exit code -1)
+	skipped := 0
+	for _, r := range result.Results {
+		if r.Execution.ExitCode == -1 {
+			skipped++
+		}
+	}
+
+	// c and d should be skipped
+	if skipped != 2 {
+		t.Errorf("expected 2 skipped checks, got %d", skipped)
+	}
+}
