@@ -77,7 +77,12 @@ func (f *Formatter) formatViolation(v *orchestrator.Violation) {
 	fmt.Fprintf(f.out, "FAIL  %s (%s)\n", v.CheckID, v.Severity)
 	fmt.Fprintf(f.out, "      > %s\n", truncateCommand(v.Command))
 	if v.Suggestion != "" {
-		fmt.Fprintf(f.out, "\n      Tip: %s\n", v.Suggestion)
+		suggestion := config.InterpolateWithExtracted(
+			v.Suggestion,
+			nil,
+			v.Extracted,
+		)
+		fmt.Fprintf(f.out, "\n      Tip: %s\n", suggestion)
 	}
 	fmt.Fprintln(f.out)
 }

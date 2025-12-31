@@ -1,7 +1,9 @@
 package config
 
 import (
+	"bytes"
 	"strings"
+	"text/template"
 )
 
 // Interpolate replaces {{.VAR}} placeholders in the config with variable values.
@@ -32,26 +34,39 @@ func (c *Config) interpolateString(s string) string {
 	return result
 }
 
-// InterpolateWithExtracted replaces {{.VAR}} in a suggestion string with
-// both config vars and extracted values from grok patterns.
-func InterpolateWithExtracted(template string, vars map[string]string, extracted map[string]string) string {
-	if template == "" {
-		return template
+// InterpolateWithExtracted renders a Go template string with config vars and
+// extracted values from grok patterns available as {{.varname}}.
+// Config vars take precedence over extracted values if there's a conflict.
+func InterpolateWithExtracted(templateStr string, vars map[string]string, extracted map[string]string) string {
+	if templateStr == "" {
+		return templateStr
 	}
 
-	result := template
-
-	// Apply config vars first
-	for key, value := range vars {
-		placeholder := "{{." + key + "}}"
-		result = strings.ReplaceAll(result, placeholder, value)
+	// Merge extracted values first, then config vars (so vars take precedence)
+	data := make(map[string]string)
+	if extracted != nil {
+		for key, value := range extracted {
+			data[key] = value
+		}
+	}
+	if vars != nil {
+		for key, value := range vars {
+			data[key] = value
+		}
 	}
 
-	// Apply extracted values
-	for key, value := range extracted {
-		placeholder := "{{." + key + "}}"
-		result = strings.ReplaceAll(result, placeholder, value)
+	// Parse and execute the template
+	tmpl, err := template.New("suggestion").Parse(templateStr)
+	if err != nil {
+		// If template parsing fails, return original string
+		return templateStr
 	}
 
-	return result
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		// If template execution fails, return original string
+		return templateStr
+	}
+
+	return buf.String()
 }
