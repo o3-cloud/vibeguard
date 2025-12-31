@@ -23,6 +23,11 @@ Major architectural decisions are documented as Architecture Decision Records (A
   - Ensures frictionless integration into CI/CD pipelines and agent loops with minimal overhead
   - Aligns with cloud-native DevOps tooling ecosystem and enables strong CLI integration
 
+- **[ADR-004: Establish Code Quality Standards and Tooling](docs/adr/ADR-004-code-quality-standards.md)**
+  - Comprehensive code quality standards using golangci-lint, goimports, and pre-commit hooks
+  - Shift-left approach with local enforcement catches issues before code review
+  - Establishes expectations for testing (70% coverage), documentation, and code style
+
 ## Project Skills
 
 The `.claude/skills/` directory contains Claude Code skills that automate common workflows:
