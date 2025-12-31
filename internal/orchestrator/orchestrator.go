@@ -36,6 +36,7 @@ type Violation struct {
 	Command    string
 	Suggestion string
 	Extracted  map[string]string
+	Timedout   bool
 }
 
 // Orchestrator coordinates check execution.
@@ -195,12 +196,17 @@ func (o *Orchestrator) Run(ctx context.Context) (*RunResult, error) {
 				passedChecks[checkID] = passed
 
 				if !passed {
+					suggestion := check.Suggestion
+					if execResult.Timedout {
+						suggestion = "Check timed out. Consider increasing the timeout value or optimizing the command."
+					}
 					violation := &Violation{
 						CheckID:    check.ID,
 						Severity:   check.Severity,
 						Command:    check.Run,
-						Suggestion: check.Suggestion,
+						Suggestion: suggestion,
 						Extracted:  result.Extracted,
+						Timedout:   execResult.Timedout,
 					}
 					levelViolations = append(levelViolations, violation)
 
@@ -242,11 +248,26 @@ func (o *Orchestrator) Run(ctx context.Context) (*RunResult, error) {
 }
 
 // calculateExitCode determines the exit code based on violations.
+// Exit codes: 0 = success, 1 = error severity violation, 3 = timeout
 func (o *Orchestrator) calculateExitCode(violations []*Violation) int {
+	hasTimeout := false
+	hasError := false
+
 	for _, v := range violations {
-		if v.Severity == config.SeverityError {
-			return 1
+		if v.Timedout {
+			hasTimeout = true
 		}
+		if v.Severity == config.SeverityError {
+			hasError = true
+		}
+	}
+
+	// Timeout takes precedence over error severity
+	if hasTimeout {
+		return executor.ExitCodeTimeout
+	}
+	if hasError {
+		return 1
 	}
 	return 0
 }
@@ -295,15 +316,22 @@ func (o *Orchestrator) RunCheck(ctx context.Context, checkID string) (*RunResult
 	var violations []*Violation
 	exitCode := 0
 	if !passed {
+		suggestion := check.Suggestion
+		if execResult.Timedout {
+			suggestion = "Check timed out. Consider increasing the timeout value or optimizing the command."
+		}
 		violation := &Violation{
 			CheckID:    check.ID,
 			Severity:   check.Severity,
 			Command:    check.Run,
-			Suggestion: check.Suggestion,
+			Suggestion: suggestion,
 			Extracted:  result.Extracted,
+			Timedout:   execResult.Timedout,
 		}
 		violations = append(violations, violation)
-		if check.Severity == config.SeverityError {
+		if execResult.Timedout {
+			exitCode = executor.ExitCodeTimeout
+		} else if check.Severity == config.SeverityError {
 			exitCode = 1
 		}
 	}

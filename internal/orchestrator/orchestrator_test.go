@@ -1084,3 +1084,186 @@ func TestRun_ParallelExecution_OrderPreservedWithinLevel(t *testing.T) {
 		}
 	}
 }
+
+// Timeout handling tests
+
+func TestRun_Timeout_ExitCode3(t *testing.T) {
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{
+				ID:       "timeout-check",
+				Run:      "sleep 5",
+				Timeout:  config.Duration(50 * time.Millisecond),
+				Severity: config.SeverityError,
+			},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 1, false, false)
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Timeout should produce exit code 3
+	if result.ExitCode != executor.ExitCodeTimeout {
+		t.Errorf("expected exit code %d for timeout, got %d", executor.ExitCodeTimeout, result.ExitCode)
+	}
+}
+
+func TestRun_Timeout_ViolationMarkedAsTimeout(t *testing.T) {
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{
+				ID:       "timeout-check",
+				Run:      "sleep 5",
+				Timeout:  config.Duration(50 * time.Millisecond),
+				Severity: config.SeverityError,
+			},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 1, false, false)
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(result.Violations) != 1 {
+		t.Fatalf("expected 1 violation, got %d", len(result.Violations))
+	}
+
+	if !result.Violations[0].Timedout {
+		t.Error("expected violation to be marked as timeout")
+	}
+}
+
+func TestRun_Timeout_SuggestionIncludesTimeoutMessage(t *testing.T) {
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{
+				ID:         "timeout-check",
+				Run:        "sleep 5",
+				Timeout:    config.Duration(50 * time.Millisecond),
+				Severity:   config.SeverityError,
+				Suggestion: "Original suggestion",
+			},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 1, false, false)
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(result.Violations) != 1 {
+		t.Fatalf("expected 1 violation, got %d", len(result.Violations))
+	}
+
+	// Suggestion should be overwritten with timeout message
+	if result.Violations[0].Suggestion == "Original suggestion" {
+		t.Error("expected suggestion to be replaced with timeout message")
+	}
+	if result.Violations[0].Suggestion != "Check timed out. Consider increasing the timeout value or optimizing the command." {
+		t.Errorf("unexpected suggestion: %q", result.Violations[0].Suggestion)
+	}
+}
+
+func TestRun_TimeoutTakesPrecedenceOverError(t *testing.T) {
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{
+				ID:       "fast-fail",
+				Run:      "exit 1",
+				Severity: config.SeverityError,
+			},
+			{
+				ID:       "timeout-check",
+				Run:      "sleep 5",
+				Timeout:  config.Duration(50 * time.Millisecond),
+				Severity: config.SeverityError,
+			},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 4, false, false) // Run in parallel
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// With both error and timeout, timeout exit code 3 should take precedence
+	if result.ExitCode != executor.ExitCodeTimeout {
+		t.Errorf("expected exit code %d (timeout precedence), got %d", executor.ExitCodeTimeout, result.ExitCode)
+	}
+}
+
+func TestRunCheck_Timeout_ExitCode3(t *testing.T) {
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{
+				ID:       "timeout-check",
+				Run:      "sleep 5",
+				Timeout:  config.Duration(50 * time.Millisecond),
+				Severity: config.SeverityError,
+			},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 1, false, false)
+
+	result, err := orch.RunCheck(context.Background(), "timeout-check")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Single check timeout should also return exit code 3
+	if result.ExitCode != executor.ExitCodeTimeout {
+		t.Errorf("expected exit code %d for timeout, got %d", executor.ExitCodeTimeout, result.ExitCode)
+	}
+}
+
+func TestRunCheck_Timeout_ViolationMarkedAsTimeout(t *testing.T) {
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{
+				ID:       "timeout-check",
+				Run:      "sleep 5",
+				Timeout:  config.Duration(50 * time.Millisecond),
+				Severity: config.SeverityError,
+			},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 1, false, false)
+
+	result, err := orch.RunCheck(context.Background(), "timeout-check")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(result.Violations) != 1 {
+		t.Fatalf("expected 1 violation, got %d", len(result.Violations))
+	}
+
+	if !result.Violations[0].Timedout {
+		t.Error("expected violation to be marked as timeout")
+	}
+}

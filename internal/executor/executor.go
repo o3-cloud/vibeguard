@@ -10,6 +10,9 @@ import (
 	"time"
 )
 
+// ExitCodeTimeout is the exit code used when a command times out.
+const ExitCodeTimeout = 3
+
 // Result contains the execution result of a check command.
 type Result struct {
 	CheckID  string
@@ -19,6 +22,7 @@ type Result struct {
 	Combined string
 	Duration time.Duration
 	Success  bool
+	Timedout bool
 	Error    error
 }
 
@@ -57,10 +61,17 @@ func (e *Executor) Execute(ctx context.Context, checkID, command string) (*Resul
 	err := cmd.Run()
 	duration := time.Since(start)
 
-	// Determine exit code
+	// Determine exit code and timeout status
 	exitCode := 0
+	timedout := false
+
 	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
+		// Check if context was cancelled due to timeout
+		if ctx.Err() == context.DeadlineExceeded {
+			timedout = true
+			exitCode = ExitCodeTimeout
+			err = nil // Timeout is a recognized condition, not an error
+		} else if exitErr, ok := err.(*exec.ExitError); ok {
 			exitCode = exitErr.ExitCode()
 			err = nil // Non-zero exit is not an error for us
 		}
@@ -77,6 +88,7 @@ func (e *Executor) Execute(ctx context.Context, checkID, command string) (*Resul
 		Combined: combined,
 		Duration: duration,
 		Success:  exitCode == 0,
+		Timedout: timedout,
 		Error:    err,
 	}, nil
 }
@@ -84,7 +96,9 @@ func (e *Executor) Execute(ctx context.Context, checkID, command string) (*Resul
 // String returns a human-readable representation of the result.
 func (r *Result) String() string {
 	status := "passed"
-	if !r.Success {
+	if r.Timedout {
+		status = "timeout"
+	} else if !r.Success {
 		status = "failed"
 	}
 	return fmt.Sprintf("%s: %s (exit=%d, duration=%v)", r.CheckID, status, r.ExitCode, r.Duration)

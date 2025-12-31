@@ -59,9 +59,8 @@ func TestExecute_VariousExitCodes(t *testing.T) {
 	exec := New("")
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := exec.Execute(context.Background(), "test", "exit "+string(rune('0'+tt.exitCode%10)))
 			// Use shell directly to handle larger exit codes
-			result, err = exec.Execute(context.Background(), "test", "exit "+itoa(tt.exitCode))
+			result, err := exec.Execute(context.Background(), "test", "exit "+itoa(tt.exitCode))
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -163,6 +162,87 @@ func TestExecute_ContextCancellation(t *testing.T) {
 	// Command should have been killed, resulting in non-zero exit
 	if result.Success {
 		t.Error("expected Success to be false for timed-out command")
+	}
+}
+
+func TestExecute_Timeout_SetsExitCode3(t *testing.T) {
+	exec := New("")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	result, err := exec.Execute(ctx, "test-timeout", "sleep 5")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Timeout should set exit code 3
+	if result.ExitCode != ExitCodeTimeout {
+		t.Errorf("expected exit code %d for timeout, got %d", ExitCodeTimeout, result.ExitCode)
+	}
+}
+
+func TestExecute_Timeout_SetsTimedoutFlag(t *testing.T) {
+	exec := New("")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	result, err := exec.Execute(ctx, "test-timeout", "sleep 5")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Timedout flag should be true
+	if !result.Timedout {
+		t.Error("expected Timedout to be true for timed-out command")
+	}
+}
+
+func TestExecute_NoTimeout_TimedoutFlagFalse(t *testing.T) {
+	exec := New("")
+
+	result, err := exec.Execute(context.Background(), "test-fast", "echo hello")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Fast command should not have Timedout flag
+	if result.Timedout {
+		t.Error("expected Timedout to be false for completed command")
+	}
+}
+
+func TestExecute_NonZeroExit_NotTimeout(t *testing.T) {
+	exec := New("")
+
+	result, err := exec.Execute(context.Background(), "test-fail", "exit 1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Non-zero exit without timeout should keep original exit code
+	if result.ExitCode != 1 {
+		t.Errorf("expected exit code 1, got %d", result.ExitCode)
+	}
+	if result.Timedout {
+		t.Error("expected Timedout to be false for non-timeout failure")
+	}
+}
+
+func TestResult_String_Timeout(t *testing.T) {
+	result := &Result{
+		CheckID:  "test-check",
+		ExitCode: ExitCodeTimeout,
+		Duration: 30 * time.Second,
+		Success:  false,
+		Timedout: true,
+	}
+
+	expected := "test-check: timeout (exit=3, duration=30s)"
+	got := result.String()
+	if got != expected {
+		t.Errorf("expected %q, got %q", expected, got)
 	}
 }
 
