@@ -84,24 +84,7 @@ judges:
 
 ---
 
-## Pattern 3: Cloud Code–Native Wrapper (Opinionated, Integrated)
-
-**Best for:** AI agent integration, autonomous workflows, seamless Cloud Code loops
-
-VibeGuard acts as a companion command designed to be invoked inside agent loops:
-
-```bash
-cloud-code vibe check || cloud-code agent fix --from=vibeguard
-```
-
-Violation payload includes policy, severity, next-step prompt, and suggested tools.
-
-**Strengths:** Seamless agent integration, zero noise in success cases, ideal for autonomous loops
-**Limitations:** Initially Cloud Code–centric; less generic for other ecosystems
-
----
-
-## Pattern 4: Event-Based Policy Graph (Advanced, Extensible)
+## Pattern 3: Event-Based Policy Graph (Advanced, Extensible)
 
 **Best for:** Complex workflows, policy cascades, advanced orchestration
 
@@ -125,7 +108,7 @@ When coverage fails, it triggers dependent judges (gap analysis, regression dete
 
 ---
 
-## Pattern 5: Git-Aware Guardrails (Change-Scope Enforcement)
+## Pattern 4: Git-Aware Guardrails (Change-Scope Enforcement)
 
 **Best for:** High signal-to-noise ratio, change-scoped validation, intent-aligned policies
 
@@ -154,10 +137,9 @@ policies:
 ## Recommendation for Next Steps
 
 1. **Pattern 1** (Declarative Policy Runner) is the strongest starting point — simple, tool-agnostic, immediately useful
-2. **Pattern 5** (Git-Aware Guardrails) should be layered in early — dramatically improves signal-to-noise
+2. **Pattern 4** (Git-Aware Guardrails) should be layered in early — dramatically improves signal-to-noise
 3. **Pattern 2** (Judge-as-a-Policy) can be adopted incrementally for policies that benefit from semantic analysis
-4. **Pattern 4** (Event-Based Policy Graph) can be deferred until complexity demands it
-5. **Pattern 3** (Cloud Code Native) is a natural integration point once core patterns stabilize
+4. **Pattern 3** (Event-Based Policy Graph) can be deferred until complexity demands it
 
 All patterns preserve the core principle: **binary signal + actionable prompt, only on violation**.
 
