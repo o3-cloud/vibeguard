@@ -1,5 +1,5 @@
 ---
-summary: Completed vibeguard-8p1: Distinguish config errors (exit 2) from execution errors (exit 3)
+summary: Completed vibeguard-8p1 Distinguish config errors (exit 2) from execution errors (exit 3)
 event_type: code
 sources:
   - vibeguard-8p1 Beads task
