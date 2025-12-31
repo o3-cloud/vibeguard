@@ -1308,3 +1308,515 @@ func TestPackageJSON_HasMethods(t *testing.T) {
 		t.Error("empty package should return false for hasField")
 	}
 }
+
+func TestToolScanner_ScanNodeTools_EslintInPackageJSON(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Write package.json with eslintConfig field (no separate config file)
+	pkgJSON := `{
+		"name": "test",
+		"eslintConfig": {
+			"extends": "eslint:recommended"
+		}
+	}`
+	if err := os.WriteFile(filepath.Join(tmpDir, "package.json"), []byte(pkgJSON), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	tools, err := scanner.scanNodeTools()
+	if err != nil {
+		t.Fatalf("scanNodeTools failed: %v", err)
+	}
+
+	var eslint *ToolInfo
+	for i := range tools {
+		if tools[i].Name == "eslint" {
+			eslint = &tools[i]
+			break
+		}
+	}
+
+	if eslint == nil || !eslint.Detected {
+		t.Error("eslint should be detected from package.json eslintConfig field")
+	}
+}
+
+func TestToolScanner_ScanNodeTools_PrettierInPackageJSON(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Write package.json with prettier field
+	pkgJSON := `{
+		"name": "test",
+		"prettier": {
+			"semi": false
+		}
+	}`
+	if err := os.WriteFile(filepath.Join(tmpDir, "package.json"), []byte(pkgJSON), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	tools, err := scanner.scanNodeTools()
+	if err != nil {
+		t.Fatalf("scanNodeTools failed: %v", err)
+	}
+
+	var prettier *ToolInfo
+	for i := range tools {
+		if tools[i].Name == "prettier" {
+			prettier = &tools[i]
+			break
+		}
+	}
+
+	if prettier == nil || !prettier.Detected {
+		t.Error("prettier should be detected from package.json prettier field")
+	}
+}
+
+func TestToolScanner_ScanNodeTools_JestInPackageJSON(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Write package.json with jest field
+	pkgJSON := `{
+		"name": "test",
+		"jest": {
+			"testEnvironment": "node"
+		}
+	}`
+	if err := os.WriteFile(filepath.Join(tmpDir, "package.json"), []byte(pkgJSON), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	tools, err := scanner.scanNodeTools()
+	if err != nil {
+		t.Fatalf("scanNodeTools failed: %v", err)
+	}
+
+	var jest *ToolInfo
+	for i := range tools {
+		if tools[i].Name == "jest" {
+			jest = &tools[i]
+			break
+		}
+	}
+
+	if jest == nil || !jest.Detected {
+		t.Error("jest should be detected from package.json jest field")
+	}
+}
+
+func TestToolScanner_ScanPythonTools_NoConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Empty directory - no Python tools should be detected
+	scanner := NewToolScanner(tmpDir)
+	tools, err := scanner.scanPythonTools()
+	if err != nil {
+		t.Fatalf("scanPythonTools failed: %v", err)
+	}
+
+	for _, tool := range tools {
+		if tool.Detected {
+			t.Errorf("No tools should be detected in empty directory, but found: %s", tool.Name)
+		}
+	}
+}
+
+func TestToolScanner_ScanPythonTools_PytestInSetupCfg(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Write setup.cfg with pytest section
+	setupCfg := `[pytest]
+testpaths = tests
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "setup.cfg"), []byte(setupCfg), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	tools, err := scanner.scanPythonTools()
+	if err != nil {
+		t.Fatalf("scanPythonTools failed: %v", err)
+	}
+
+	var pytest *ToolInfo
+	for i := range tools {
+		if tools[i].Name == "pytest" {
+			pytest = &tools[i]
+			break
+		}
+	}
+
+	if pytest == nil || !pytest.Detected {
+		t.Error("pytest should be detected from setup.cfg")
+	}
+}
+
+func TestToolScanner_ScanPythonTools_RuffInPyproject(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Write pyproject.toml with ruff section
+	pyproject := `[tool.ruff]
+line-length = 100
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "pyproject.toml"), []byte(pyproject), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	tools, err := scanner.scanPythonTools()
+	if err != nil {
+		t.Fatalf("scanPythonTools failed: %v", err)
+	}
+
+	var ruff *ToolInfo
+	for i := range tools {
+		if tools[i].Name == "ruff" {
+			ruff = &tools[i]
+			break
+		}
+	}
+
+	if ruff == nil || !ruff.Detected {
+		t.Error("ruff should be detected from pyproject.toml")
+	} else {
+		if ruff.ConfigFile != "pyproject.toml" {
+			t.Errorf("ruff config should be pyproject.toml, got %s", ruff.ConfigFile)
+		}
+	}
+}
+
+func TestToolScanner_ScanPythonTools_PylintInPyproject(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Write pyproject.toml with pylint section
+	pyproject := `[tool.pylint]
+max-line-length = 120
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "pyproject.toml"), []byte(pyproject), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	tools, err := scanner.scanPythonTools()
+	if err != nil {
+		t.Fatalf("scanPythonTools failed: %v", err)
+	}
+
+	var pylint *ToolInfo
+	for i := range tools {
+		if tools[i].Name == "pylint" {
+			pylint = &tools[i]
+			break
+		}
+	}
+
+	if pylint == nil || !pylint.Detected {
+		t.Error("pylint should be detected from pyproject.toml")
+	}
+}
+
+func TestToolScanner_ScanAll_WithErrors(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a realistic project with multiple tool types
+	files := map[string]string{
+		"go.mod":                  "module test\n\ngo 1.21\n",
+		".golangci.yml":           "linters:\n  enable:\n    - gofmt\n",
+		"package.json":            `{"name": "test", "devDependencies": {"eslint": "^8.0.0"}}`,
+		".pre-commit-config.yaml": "repos: []\n",
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(tmpDir, name), []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Create .github/workflows directory
+	workflowDir := filepath.Join(tmpDir, ".github", "workflows")
+	if err := os.MkdirAll(workflowDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workflowDir, "ci.yml"), []byte("name: CI\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	tools, err := scanner.ScanAll()
+	if err != nil {
+		t.Fatalf("ScanAll failed: %v", err)
+	}
+
+	// Should detect tools from multiple categories
+	categories := make(map[ToolCategory]bool)
+	for _, tool := range tools {
+		categories[tool.Category] = true
+	}
+
+	if !categories[CategoryLinter] {
+		t.Error("Should detect linter tools")
+	}
+	if !categories[CategoryHooks] {
+		t.Error("Should detect hook tools")
+	}
+	if !categories[CategoryCI] {
+		t.Error("Should detect CI tools")
+	}
+}
+
+func TestToolScanner_ScanNodeTools_NoPackageJSON(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Only ESLint config file, no package.json
+	if err := os.WriteFile(filepath.Join(tmpDir, ".eslintrc.json"), []byte(`{"extends": "eslint:recommended"}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	tools, err := scanner.scanNodeTools()
+	if err != nil {
+		t.Fatalf("scanNodeTools failed: %v", err)
+	}
+
+	var eslint *ToolInfo
+	for i := range tools {
+		if tools[i].Name == "eslint" {
+			eslint = &tools[i]
+			break
+		}
+	}
+
+	// ESLint should still be detected from config file
+	if eslint == nil || !eslint.Detected {
+		t.Error("eslint should be detected from .eslintrc.json even without package.json")
+	}
+}
+
+func TestToolScanner_ScanGitHooks_HuskyField(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Write package.json with husky field (old style config)
+	pkgJSON := `{
+		"name": "test",
+		"husky": {
+			"hooks": {
+				"pre-commit": "npm test"
+			}
+		}
+	}`
+	if err := os.WriteFile(filepath.Join(tmpDir, "package.json"), []byte(pkgJSON), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	tools, err := scanner.scanGitHooks()
+	if err != nil {
+		t.Fatalf("scanGitHooks failed: %v", err)
+	}
+
+	var husky *ToolInfo
+	for i := range tools {
+		if tools[i].Name == "husky" {
+			husky = &tools[i]
+			break
+		}
+	}
+
+	if husky == nil || !husky.Detected {
+		t.Error("husky should be detected from package.json husky field")
+	}
+}
+
+func TestToolScanner_ScanCITools_MultipleWorkflows(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create .github/workflows directory with multiple workflow files
+	workflowDir := filepath.Join(tmpDir, ".github", "workflows")
+	if err := os.MkdirAll(workflowDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create multiple workflow files
+	workflows := []string{"ci.yml", "release.yaml", "test.yml"}
+	for _, wf := range workflows {
+		if err := os.WriteFile(filepath.Join(workflowDir, wf), []byte("name: "+wf+"\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	tools, err := scanner.scanCITools()
+	if err != nil {
+		t.Fatalf("scanCITools failed: %v", err)
+	}
+
+	var githubActions *ToolInfo
+	for i := range tools {
+		if tools[i].Name == "GitHub Actions" {
+			githubActions = &tools[i]
+			break
+		}
+	}
+
+	if githubActions == nil || !githubActions.Detected {
+		t.Error("GitHub Actions should be detected")
+	} else {
+		// Should have indicators for all workflow files
+		if len(githubActions.Indicators) < 3 {
+			t.Errorf("Should have indicators for all workflows, got %d: %v", len(githubActions.Indicators), githubActions.Indicators)
+		}
+	}
+}
+
+func TestToolScanner_ScanPythonTools_MypyFromRequirements(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Write requirements-dev.txt with mypy
+	if err := os.WriteFile(filepath.Join(tmpDir, "requirements-dev.txt"), []byte("mypy==1.0.0\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	tools, err := scanner.scanPythonTools()
+	if err != nil {
+		t.Fatalf("scanPythonTools failed: %v", err)
+	}
+
+	var mypy *ToolInfo
+	for i := range tools {
+		if tools[i].Name == "mypy" {
+			mypy = &tools[i]
+			break
+		}
+	}
+
+	if mypy == nil || !mypy.Detected {
+		t.Error("mypy should be detected from requirements-dev.txt")
+	}
+}
+
+func TestToolScanner_ScanPythonTools_PytestFromRequirements(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Write requirements.txt with pytest
+	if err := os.WriteFile(filepath.Join(tmpDir, "requirements.txt"), []byte("pytest>=7.0.0\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	tools, err := scanner.scanPythonTools()
+	if err != nil {
+		t.Fatalf("scanPythonTools failed: %v", err)
+	}
+
+	var pytest *ToolInfo
+	for i := range tools {
+		if tools[i].Name == "pytest" {
+			pytest = &tools[i]
+			break
+		}
+	}
+
+	if pytest == nil || !pytest.Detected {
+		t.Error("pytest should be detected from requirements.txt")
+	}
+}
+
+func TestToolScanner_ScanNodeTools_PrettierConfigVariants(t *testing.T) {
+	tests := []struct {
+		name       string
+		configFile string
+	}{
+		{"prettierrc", ".prettierrc"},
+		{"prettierrc.js", ".prettierrc.js"},
+		{"prettierrc.json", ".prettierrc.json"},
+		{"prettier.config.js", "prettier.config.js"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+
+			// Write package.json (required for npm audit detection)
+			if err := os.WriteFile(filepath.Join(tmpDir, "package.json"), []byte(`{"name": "test"}`), 0644); err != nil {
+				t.Fatal(err)
+			}
+
+			// Write config file
+			if err := os.WriteFile(filepath.Join(tmpDir, tc.configFile), []byte("{}"), 0644); err != nil {
+				t.Fatal(err)
+			}
+
+			scanner := NewToolScanner(tmpDir)
+			tools, err := scanner.scanNodeTools()
+			if err != nil {
+				t.Fatalf("scanNodeTools failed: %v", err)
+			}
+
+			var prettier *ToolInfo
+			for i := range tools {
+				if tools[i].Name == "prettier" {
+					prettier = &tools[i]
+					break
+				}
+			}
+
+			if prettier == nil || !prettier.Detected {
+				t.Errorf("prettier should be detected with %s", tc.configFile)
+			}
+		})
+	}
+}
+
+func TestToolScanner_ScanGoTools_GolangciLintVariants(t *testing.T) {
+	tests := []struct {
+		name       string
+		configFile string
+	}{
+		{"yml", ".golangci.yml"},
+		{"yaml", ".golangci.yaml"},
+		{"toml", ".golangci.toml"},
+		{"json", ".golangci.json"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+
+			// Write go.mod
+			if err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module test\n"), 0644); err != nil {
+				t.Fatal(err)
+			}
+
+			// Write config file
+			if err := os.WriteFile(filepath.Join(tmpDir, tc.configFile), []byte(""), 0644); err != nil {
+				t.Fatal(err)
+			}
+
+			scanner := NewToolScanner(tmpDir)
+			tools, err := scanner.scanGoTools()
+			if err != nil {
+				t.Fatalf("scanGoTools failed: %v", err)
+			}
+
+			var golangciLint *ToolInfo
+			for i := range tools {
+				if tools[i].Name == "golangci-lint" {
+					golangciLint = &tools[i]
+					break
+				}
+			}
+
+			if golangciLint == nil || !golangciLint.Detected {
+				t.Errorf("golangci-lint should be detected with %s", tc.configFile)
+			} else {
+				if golangciLint.ConfigFile != tc.configFile {
+					t.Errorf("golangci-lint config should be %s, got %s", tc.configFile, golangciLint.ConfigFile)
+				}
+			}
+		})
+	}
+}

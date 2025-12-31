@@ -779,6 +779,408 @@ func TestMetadataExtractor_ExtractStructure_ConfigFiles(t *testing.T) {
 	}
 }
 
+func TestMetadataExtractor_ExtractStructure_Ruby(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create Ruby project structure
+	dirs := []string{"lib", "spec", "bin"}
+	for _, dir := range dirs {
+		if err := os.MkdirAll(filepath.Join(tmpDir, dir), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Create files
+	files := map[string]string{
+		"Gemfile":    "source 'https://rubygems.org'\ngem 'rails'\n",
+		"app.rb":     "puts 'hello'",
+		"bin/main":   "#!/usr/bin/env ruby\nrequire_relative '../app'",
+		"lib/foo.rb": "module Foo; end",
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(tmpDir, name), []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	extractor := NewMetadataExtractor(tmpDir)
+	structure, err := extractor.ExtractStructure(Ruby)
+	if err != nil {
+		t.Fatalf("ExtractStructure() error = %v", err)
+	}
+
+	// Check entry points
+	if !sliceContains(structure.EntryPoints, "app.rb") {
+		t.Errorf("EntryPoints should contain 'app.rb', got %v", structure.EntryPoints)
+	}
+	if !sliceContains(structure.EntryPoints, "bin/main") {
+		t.Errorf("EntryPoints should contain 'bin/main', got %v", structure.EntryPoints)
+	}
+
+	// Check source dirs
+	if !sliceContains(structure.SourceDirs, "lib") {
+		t.Errorf("SourceDirs should contain 'lib', got %v", structure.SourceDirs)
+	}
+
+	// Check test dirs
+	if !sliceContains(structure.TestDirs, "spec") {
+		t.Errorf("TestDirs should contain 'spec', got %v", structure.TestDirs)
+	}
+
+	// Ruby typically doesn't have build output
+	if structure.BuildOutputDir != "" {
+		t.Errorf("BuildOutputDir should be empty for Ruby, got %q", structure.BuildOutputDir)
+	}
+}
+
+func TestMetadataExtractor_ExtractStructure_Java(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create Maven-style Java project structure
+	dirs := []string{
+		"src/main/java/com/example",
+		"src/main/resources",
+		"src/test/java/com/example",
+		"src/test/resources",
+		"target",
+	}
+	for _, dir := range dirs {
+		if err := os.MkdirAll(filepath.Join(tmpDir, dir), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Create files
+	files := map[string]string{
+		"pom.xml":                            "<project><modelVersion>4.0.0</modelVersion></project>",
+		"src/main/java/com/example/App.java": "package com.example;\npublic class App {}",
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(tmpDir, name), []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	extractor := NewMetadataExtractor(tmpDir)
+	structure, err := extractor.ExtractStructure(Java)
+	if err != nil {
+		t.Fatalf("ExtractStructure() error = %v", err)
+	}
+
+	// Check source dirs
+	if !sliceContains(structure.SourceDirs, "src/main/java") {
+		t.Errorf("SourceDirs should contain 'src/main/java', got %v", structure.SourceDirs)
+	}
+	if !sliceContains(structure.SourceDirs, "src/main/resources") {
+		t.Errorf("SourceDirs should contain 'src/main/resources', got %v", structure.SourceDirs)
+	}
+
+	// Check test dirs
+	if !sliceContains(structure.TestDirs, "src/test/java") {
+		t.Errorf("TestDirs should contain 'src/test/java', got %v", structure.TestDirs)
+	}
+
+	// Check build output
+	if structure.BuildOutputDir != "target" {
+		t.Errorf("BuildOutputDir = %q, want %q", structure.BuildOutputDir, "target")
+	}
+}
+
+func TestMetadataExtractor_ExtractStructure_Java_Gradle(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create Gradle-style Java project with simple src layout
+	dirs := []string{"src", "build"}
+	for _, dir := range dirs {
+		if err := os.MkdirAll(filepath.Join(tmpDir, dir), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Create files
+	files := map[string]string{
+		"build.gradle": "plugins { id 'java' }",
+		"src/App.java": "public class App {}",
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(tmpDir, name), []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	extractor := NewMetadataExtractor(tmpDir)
+	structure, err := extractor.ExtractStructure(Java)
+	if err != nil {
+		t.Fatalf("ExtractStructure() error = %v", err)
+	}
+
+	// For simple layout, src should be detected
+	if !sliceContains(structure.SourceDirs, "src") {
+		t.Errorf("SourceDirs should contain 'src', got %v", structure.SourceDirs)
+	}
+
+	// Check build output
+	if structure.BuildOutputDir != "build" {
+		t.Errorf("BuildOutputDir = %q, want %q", structure.BuildOutputDir, "build")
+	}
+}
+
+func TestMetadataExtractor_ExtractGoStructure_WithMainGo(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create Go project with main.go at root
+	if err := os.MkdirAll(filepath.Join(tmpDir, "bin"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	files := map[string]string{
+		"go.mod":  "module example.com/test\n\ngo 1.21\n",
+		"main.go": "package main\n\nfunc main() {}\n",
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(tmpDir, name), []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	extractor := NewMetadataExtractor(tmpDir)
+	structure, err := extractor.ExtractStructure(Go)
+	if err != nil {
+		t.Fatalf("ExtractStructure() error = %v", err)
+	}
+
+	// Check entry points - should include main.go at root
+	if !sliceContains(structure.EntryPoints, "main.go") {
+		t.Errorf("EntryPoints should contain 'main.go', got %v", structure.EntryPoints)
+	}
+
+	// Check build output
+	if structure.BuildOutputDir != "bin" {
+		t.Errorf("BuildOutputDir = %q, want %q", structure.BuildOutputDir, "bin")
+	}
+}
+
+func TestMetadataExtractor_ExtractGoMetadata_WithVersionFile(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	files := map[string]string{
+		"go.mod":  "module example.com/test\n\ngo 1.21\n",
+		"VERSION": "1.2.3",
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(tmpDir, name), []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	extractor := NewMetadataExtractor(tmpDir)
+	metadata, err := extractor.Extract(Go)
+	if err != nil {
+		t.Fatalf("Extract() error = %v", err)
+	}
+
+	if metadata.Version != "1.2.3" {
+		t.Errorf("Version = %q, want %q", metadata.Version, "1.2.3")
+	}
+}
+
+func TestMetadataExtractor_ExtractPythonMetadata_WithAuthors(t *testing.T) {
+	tmpDir := t.TempDir()
+	pyproject := `[project]
+name = "my-pkg"
+version = "1.0.0"
+authors = [
+    "Jane Doe <jane@example.com>",
+    "John Doe <john@example.com>"
+]
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "pyproject.toml"), []byte(pyproject), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	extractor := NewMetadataExtractor(tmpDir)
+	metadata, err := extractor.Extract(Python)
+	if err != nil {
+		t.Fatalf("Extract() error = %v", err)
+	}
+
+	if metadata.Author != "Jane Doe <jane@example.com>" {
+		t.Errorf("Author = %q, want first author from list", metadata.Author)
+	}
+}
+
+func TestMetadataExtractor_ExtractNodeMetadata_ExtraFields(t *testing.T) {
+	tmpDir := t.TempDir()
+	packageJSON := `{
+		"name": "extra-test",
+		"version": "1.0.0",
+		"main": "lib/index.js",
+		"module": "lib/index.mjs",
+		"types": "lib/index.d.ts"
+	}`
+	if err := os.WriteFile(filepath.Join(tmpDir, "package.json"), []byte(packageJSON), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	extractor := NewMetadataExtractor(tmpDir)
+	metadata, err := extractor.Extract(Node)
+	if err != nil {
+		t.Fatalf("Extract() error = %v", err)
+	}
+
+	if metadata.Extra["main"] != "lib/index.js" {
+		t.Errorf("Extra[main] = %q, want %q", metadata.Extra["main"], "lib/index.js")
+	}
+	if metadata.Extra["module"] != "lib/index.mjs" {
+		t.Errorf("Extra[module] = %q, want %q", metadata.Extra["module"], "lib/index.mjs")
+	}
+	if metadata.Extra["types"] != "lib/index.d.ts" {
+		t.Errorf("Extra[types] = %q, want %q", metadata.Extra["types"], "lib/index.d.ts")
+	}
+}
+
+func TestMetadataExtractor_ExtractNodeMetadata_InvalidJSON(t *testing.T) {
+	tmpDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmpDir, "package.json"), []byte("not valid json"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	extractor := NewMetadataExtractor(tmpDir)
+	_, err := extractor.Extract(Node)
+	if err == nil {
+		t.Error("Expected error for invalid JSON")
+	}
+}
+
+func TestMetadataExtractor_ExtractNodeStructure_WithBin(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create Node project with bin entry
+	dirs := []string{"src", "__tests__"}
+	for _, dir := range dirs {
+		if err := os.MkdirAll(filepath.Join(tmpDir, dir), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	files := map[string]string{
+		"package.json": `{"name":"test","bin":{"cli":"./bin/cli.js"}}`,
+		"src/index.js": "module.exports = {}",
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(tmpDir, name), []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	extractor := NewMetadataExtractor(tmpDir)
+	structure, err := extractor.ExtractStructure(Node)
+	if err != nil {
+		t.Fatalf("ExtractStructure() error = %v", err)
+	}
+
+	// Check __tests__ is detected
+	if !sliceContains(structure.TestDirs, "__tests__") {
+		t.Errorf("TestDirs should contain '__tests__', got %v", structure.TestDirs)
+	}
+}
+
+func TestMetadataExtractor_ExtractPythonStructure_TestDir(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create Python project with test directory
+	dirs := []string{"testing", "dist"}
+	for _, dir := range dirs {
+		if err := os.MkdirAll(filepath.Join(tmpDir, dir), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	files := map[string]string{
+		"app.py": "import flask",
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(tmpDir, name), []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	extractor := NewMetadataExtractor(tmpDir)
+	structure, err := extractor.ExtractStructure(Python)
+	if err != nil {
+		t.Fatalf("ExtractStructure() error = %v", err)
+	}
+
+	// Check entry points
+	if !sliceContains(structure.EntryPoints, "app.py") {
+		t.Errorf("EntryPoints should contain 'app.py', got %v", structure.EntryPoints)
+	}
+
+	// Check test dirs (testing)
+	if !sliceContains(structure.TestDirs, "testing") {
+		t.Errorf("TestDirs should contain 'testing', got %v", structure.TestDirs)
+	}
+
+	// Check build output
+	if structure.BuildOutputDir != "dist" {
+		t.Errorf("BuildOutputDir = %q, want %q", structure.BuildOutputDir, "dist")
+	}
+}
+
+func TestMetadataExtractor_MonorepoGoPackages(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create Go monorepo structure with packages directory
+	pkgDir := filepath.Join(tmpDir, "packages")
+	for _, pkg := range []string{"pkg1", "pkg2"} {
+		if err := os.MkdirAll(filepath.Join(pkgDir, pkg), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(pkgDir, pkg, "go.mod"), []byte("module "+pkg+"\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	extractor := NewMetadataExtractor(tmpDir)
+	structure, err := extractor.ExtractStructure(Go)
+	if err != nil {
+		t.Fatalf("ExtractStructure() error = %v", err)
+	}
+
+	if !structure.HasMonorepo {
+		t.Error("HasMonorepo should be true for packages/ with multiple go.mod files")
+	}
+}
+
+func TestMetadataExtractor_ExtractJavaMetadata_GradleKts(t *testing.T) {
+	tmpDir := t.TempDir()
+	// Note: Gradle parsing uses simple regex that matches first occurrence
+	// Real Gradle files often have version early in the file
+	buildGradleKts := `group = "com.example"
+version = "3.0.0"
+
+plugins {
+    kotlin("jvm")
+}
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "build.gradle.kts"), []byte(buildGradleKts), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	extractor := NewMetadataExtractor(tmpDir)
+	metadata, err := extractor.Extract(Java)
+	if err != nil {
+		t.Fatalf("Extract() error = %v", err)
+	}
+
+	if metadata.Version != "3.0.0" {
+		t.Errorf("Version = %q, want %q", metadata.Version, "3.0.0")
+	}
+	if metadata.Extra["group"] != "com.example" {
+		t.Errorf("group = %q, want %q", metadata.Extra["group"], "com.example")
+	}
+}
+
 // sliceContains checks if a string slice contains a value.
 func sliceContains(slice []string, value string) bool {
 	for _, v := range slice {
