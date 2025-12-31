@@ -65,6 +65,8 @@ func (c *Composer) buildSections() []PromptSection {
 	return []PromptSection{
 		HeaderSection(),
 		ProjectAnalysisSection(c.analysis),
+		ToolingInspectionSection(c.analysis),
+		ToolingResearchSection(c.analysis.ProjectType),
 		RecommendationsSection(c.recommendations),
 		ConfigRequirementsSection(),
 		LanguageExamplesSection(c.analysis.ProjectType),
@@ -97,6 +99,12 @@ func (c *Composer) ComposeWithOptions(opts ComposerOptions) string {
 	if opts.IncludeAnalysis {
 		sections = append(sections, ProjectAnalysisSection(c.analysis))
 	}
+	if opts.IncludeToolingInspection {
+		sections = append(sections, ToolingInspectionSection(c.analysis))
+	}
+	if opts.IncludeToolingResearch {
+		sections = append(sections, ToolingResearchSection(c.analysis.ProjectType))
+	}
 	if opts.IncludeRecommendations {
 		sections = append(sections, RecommendationsSection(c.recommendations))
 	}
@@ -118,37 +126,43 @@ func (c *Composer) ComposeWithOptions(opts ComposerOptions) string {
 
 // ComposerOptions controls which sections to include in the prompt.
 type ComposerOptions struct {
-	IncludeHeader          bool
-	IncludeAnalysis        bool
-	IncludeRecommendations bool
-	IncludeRequirements    bool
-	IncludeExamples        bool
-	IncludeValidation      bool
-	IncludeTask            bool
+	IncludeHeader            bool
+	IncludeAnalysis          bool
+	IncludeToolingInspection bool
+	IncludeToolingResearch   bool
+	IncludeRecommendations   bool
+	IncludeRequirements      bool
+	IncludeExamples          bool
+	IncludeValidation        bool
+	IncludeTask              bool
 }
 
 // DefaultComposerOptions returns options with all sections enabled.
 func DefaultComposerOptions() ComposerOptions {
 	return ComposerOptions{
-		IncludeHeader:          true,
-		IncludeAnalysis:        true,
-		IncludeRecommendations: true,
-		IncludeRequirements:    true,
-		IncludeExamples:        true,
-		IncludeValidation:      true,
-		IncludeTask:            true,
+		IncludeHeader:            true,
+		IncludeAnalysis:          true,
+		IncludeToolingInspection: true,
+		IncludeToolingResearch:   true,
+		IncludeRecommendations:   true,
+		IncludeRequirements:      true,
+		IncludeExamples:          true,
+		IncludeValidation:        true,
+		IncludeTask:              true,
 	}
 }
 
 // MinimalComposerOptions returns options for a minimal prompt (no validation details).
 func MinimalComposerOptions() ComposerOptions {
 	return ComposerOptions{
-		IncludeHeader:          true,
-		IncludeAnalysis:        true,
-		IncludeRecommendations: true,
-		IncludeRequirements:    true,
-		IncludeExamples:        false,
-		IncludeValidation:      false,
-		IncludeTask:            true,
+		IncludeHeader:            true,
+		IncludeAnalysis:          true,
+		IncludeToolingInspection: false,
+		IncludeToolingResearch:   false,
+		IncludeRecommendations:   true,
+		IncludeRequirements:      true,
+		IncludeExamples:          false,
+		IncludeValidation:        false,
+		IncludeTask:              true,
 	}
 }

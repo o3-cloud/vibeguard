@@ -324,6 +324,152 @@ func TestFormatGrokPatterns(t *testing.T) {
 	}
 }
 
+func TestToolingInspectionSection(t *testing.T) {
+	t.Run("with config files", func(t *testing.T) {
+		analysis := &ProjectAnalysis{
+			Name:        "test-project",
+			ProjectType: "go",
+			DetectedTools: []ToolInfo{
+				{Name: "golangci-lint", ConfigFile: ".golangci.yml", Detected: true},
+				{Name: "gofmt", Detected: true}, // no config file
+			},
+		}
+
+		section := ToolingInspectionSection(analysis)
+
+		expectedContents := []string{
+			"## Tooling Inspection Instructions",
+			"### Configuration Files to Analyze",
+			"- **golangci-lint**: Read `.golangci.yml`",
+			"### What to Look For",
+			"Enabled rules/checks",
+			"Disabled rules",
+			"Custom settings",
+		}
+
+		for _, expected := range expectedContents {
+			if !strings.Contains(section.Content, expected) {
+				t.Errorf("Tooling inspection section should contain %q", expected)
+			}
+		}
+
+		// gofmt should NOT be in config files to analyze (no config file)
+		if strings.Contains(section.Content, "- **gofmt**: Read") {
+			t.Error("Tools without config files should not be listed in config files to analyze")
+		}
+	})
+
+	t.Run("without config files", func(t *testing.T) {
+		analysis := &ProjectAnalysis{
+			Name:        "test-project",
+			ProjectType: "go",
+			DetectedTools: []ToolInfo{
+				{Name: "gofmt", Detected: true},
+				{Name: "go test", Detected: true},
+			},
+		}
+
+		section := ToolingInspectionSection(analysis)
+
+		// Should still have the section but no config files list
+		if !strings.Contains(section.Content, "## Tooling Inspection Instructions") {
+			t.Error("Should still contain title")
+		}
+		if strings.Contains(section.Content, "### Configuration Files to Analyze") {
+			t.Error("Should not have config files section when no tools have configs")
+		}
+	})
+}
+
+func TestToolingResearchSection(t *testing.T) {
+	testCases := []struct {
+		projectType     string
+		expectedTools   []string
+		unexpectedTools []string
+	}{
+		{
+			projectType:   "go",
+			expectedTools: []string{"staticcheck", "gosec", "errcheck", "govulncheck"},
+		},
+		{
+			projectType:   "node",
+			expectedTools: []string{"tsc --noEmit", "npm audit", "depcheck", "madge"},
+		},
+		{
+			projectType:   "python",
+			expectedTools: []string{"bandit", "safety", "vulture", "radon"},
+		},
+		{
+			projectType:   "rust",
+			expectedTools: []string{"cargo audit", "cargo deny", "cargo outdated"},
+		},
+		{
+			projectType:   "ruby",
+			expectedTools: []string{"brakeman", "bundler-audit", "reek"},
+		},
+		{
+			projectType:   "java",
+			expectedTools: []string{"SpotBugs", "OWASP Dependency-Check", "PMD"},
+		},
+		{
+			projectType:   "unknown",
+			expectedTools: []string{"gitleaks", "trivy"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.projectType, func(t *testing.T) {
+			section := ToolingResearchSection(tc.projectType)
+
+			if !strings.Contains(section.Content, "## Additional Tooling Research") {
+				t.Error("Should contain section title")
+			}
+
+			for _, tool := range tc.expectedTools {
+				if !strings.Contains(section.Content, tool) {
+					t.Errorf("Section for %s should contain tool %q", tc.projectType, tool)
+				}
+			}
+
+			// Check that it has the guidance for presenting suggestions
+			if !strings.Contains(section.Content, "### How to Present Suggestions") {
+				t.Error("Should contain guidance on presenting suggestions")
+			}
+			if !strings.Contains(section.Content, "Would you like me to include checks") {
+				t.Error("Should contain prompt for user about including additional tools")
+			}
+		})
+	}
+}
+
+func TestGetToolSuggestions(t *testing.T) {
+	// Test that each project type returns non-empty suggestions
+	projectTypes := []string{"go", "node", "python", "rust", "ruby", "java", "unknown"}
+
+	for _, pt := range projectTypes {
+		suggestions := getToolSuggestions(pt)
+		if len(suggestions) == 0 {
+			t.Errorf("getToolSuggestions(%q) returned empty slice", pt)
+		}
+
+		// Verify each suggestion has required fields
+		for _, s := range suggestions {
+			if s.Name == "" {
+				t.Errorf("Suggestion for %s has empty Name", pt)
+			}
+			if s.Category == "" {
+				t.Errorf("Suggestion %s for %s has empty Category", s.Name, pt)
+			}
+			if s.Purpose == "" {
+				t.Errorf("Suggestion %s for %s has empty Purpose", s.Name, pt)
+			}
+			if s.Value == "" {
+				t.Errorf("Suggestion %s for %s has empty Value", s.Name, pt)
+			}
+		}
+	}
+}
+
 func TestPromptTokenEstimate(t *testing.T) {
 	analysis := &ProjectAnalysis{
 		Name:            "github.com/example/project",
