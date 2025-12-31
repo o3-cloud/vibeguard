@@ -122,7 +122,7 @@ Optional fields:
 - **assert:** Condition that must be true (e.g., "coverage >= 70")
 - **requires:** Array of check IDs that must pass first
 - **severity:** "error" or "warning" (default: error)
-- **suggestion:** Message shown on failure (supports {{.variable}} templating)
+- **suggestion:** Message shown on failure (supports {{`.variable`}} templating)
 - **timeout:** Duration string (e.g., "30s", "5m")
 
 ---
@@ -141,7 +141,7 @@ Optional fields:
 ### Lint Check
 ```yaml
 - id: lint
-  run: golangci-lint run {{.go_packages}}
+  run: golangci-lint run {{`.go_packages`}}
   severity: error
   suggestion: "Fix linting issues. Run 'golangci-lint run --fix' for auto-fixes."
   timeout: 30s
@@ -150,7 +150,7 @@ Optional fields:
 ### Test with Coverage
 ```yaml
 - id: test
-  run: go test {{.go_packages}}
+  run: go test {{`.go_packages`}}
   severity: error
   suggestion: "Fix failing tests before committing"
   timeout: 60s
@@ -161,7 +161,7 @@ Optional fields:
     - total:.*\(statements\)\s+%{NUMBER:coverage}%
   assert: "coverage >= 70"
   severity: warning
-  suggestion: "Coverage is {{.coverage}}%, target is 70%. Add tests to improve."
+  suggestion: "Coverage is {{`.coverage`}}%, target is 70%. Add tests to improve."
   requires:
     - test
   timeout: 60s
@@ -170,7 +170,7 @@ Optional fields:
 ### Build Check with Dependency
 ```yaml
 - id: build
-  run: go build {{.go_packages}}
+  run: go build {{`.go_packages`}}
   severity: error
   suggestion: "Fix compilation errors"
   timeout: 30s

@@ -13,12 +13,16 @@ import (
 	"github.com/vibeguard/vibeguard/internal/output"
 )
 
-// ExitError represents a check execution that completed but needs a specific exit code.
+// ExitError represents an operation that completed but needs a specific exit code.
 type ExitError struct {
-	Code int
+	Code    int
+	Message string
 }
 
 func (e *ExitError) Error() string {
+	if e.Message != "" {
+		return e.Message
+	}
 	return fmt.Sprintf("exit code %d", e.Code)
 }
 
