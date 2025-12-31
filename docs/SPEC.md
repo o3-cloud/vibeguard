@@ -1,0 +1,1 @@
+@docs/log/2025-12-30_vibeguard-specification.md
