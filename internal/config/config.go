@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -8,25 +9,49 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// ConfigError represents a configuration error that should result in exit code 2.
+type ConfigError struct {
+	Message string
+	Cause   error
+}
+
+func (e *ConfigError) Error() string {
+	if e.Cause != nil {
+		return fmt.Sprintf("%s: %v", e.Message, e.Cause)
+	}
+	return e.Message
+}
+
+func (e *ConfigError) Unwrap() error {
+	return e.Cause
+}
+
+// IsConfigError returns true if the given error is a configuration error.
+func IsConfigError(err error) bool {
+	var configErr *ConfigError
+	return errors.As(err, &configErr)
+}
+
 // Load reads and parses a VibeGuard configuration file.
 // If path is empty, it searches for config files in the default locations.
+// Returns a ConfigError for any configuration-related errors (exit code 2).
 func Load(path string) (*Config, error) {
 	if path == "" {
 		var err error
 		path, err = findConfigFile()
 		if err != nil {
-			return nil, err
+			return nil, &ConfigError{Message: "no config file found", Cause: err}
 		}
 	}
 
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read config file: %w", err)
+		return nil, &ConfigError{Message: "failed to read config file", Cause: err}
 	}
 
 	var cfg Config
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, fmt.Errorf("failed to parse config file: %w", err)
+		return nil, &ConfigError{Message: "failed to parse config file", Cause: err}
 	}
 
 	// Apply defaults
@@ -34,7 +59,7 @@ func Load(path string) (*Config, error) {
 
 	// Validate configuration
 	if err := cfg.Validate(); err != nil {
-		return nil, fmt.Errorf("configuration validation failed: %w", err)
+		return nil, &ConfigError{Message: "configuration validation failed", Cause: err}
 	}
 
 	// Interpolate variables
@@ -103,6 +128,11 @@ func (c *Config) Validate() error {
 
 		// Validate requires references
 		for _, reqID := range check.Requires {
+			// Check for self-reference
+			if reqID == check.ID {
+				return fmt.Errorf("check %q cannot require itself", check.ID)
+			}
+
 			if !checkIDs[reqID] {
 				// Check if it exists at all (forward reference)
 				found := false
