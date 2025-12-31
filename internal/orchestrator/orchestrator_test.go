@@ -1418,3 +1418,219 @@ func TestRun_FailFast_AllChecksPassDoesNotTrigger(t *testing.T) {
 		t.Error("expected FailFastTriggered to be false when all checks pass")
 	}
 }
+
+// Grok pattern matching tests
+
+func TestRun_GrokExtractsValues(t *testing.T) {
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{
+				ID:       "coverage-check",
+				Run:      `echo "coverage: 85.5%"`,
+				Grok:     []string{"coverage: (?P<coverage>[0-9.]+)%"},
+				Severity: config.SeverityError,
+			},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 1, false, false)
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(result.Results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result.Results))
+	}
+
+	// Verify extracted values
+	extracted := result.Results[0].Extracted
+	if extracted["coverage"] != "85.5" {
+		t.Errorf("expected coverage=85.5, got %q", extracted["coverage"])
+	}
+}
+
+func TestRun_GrokMultiplePatterns(t *testing.T) {
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{
+				ID:  "multi-grok",
+				Run: `echo "total: 42 tests, coverage: 75.0%"`,
+				Grok: []string{
+					"total: (?P<total>[0-9]+) tests",
+					"coverage: (?P<coverage>[0-9.]+)%",
+				},
+				Severity: config.SeverityError,
+			},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 1, false, false)
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(result.Results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result.Results))
+	}
+
+	extracted := result.Results[0].Extracted
+	if extracted["total"] != "42" {
+		t.Errorf("expected total=42, got %q", extracted["total"])
+	}
+	if extracted["coverage"] != "75.0" {
+		t.Errorf("expected coverage=75.0, got %q", extracted["coverage"])
+	}
+}
+
+func TestRun_GrokNoPatterns_EmptyExtracted(t *testing.T) {
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{
+				ID:       "no-grok",
+				Run:      `echo "hello"`,
+				Severity: config.SeverityError,
+			},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 1, false, false)
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(result.Results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result.Results))
+	}
+
+	// Without grok patterns, Extracted should be empty map
+	if len(result.Results[0].Extracted) != 0 {
+		t.Errorf("expected empty extracted map, got %v", result.Results[0].Extracted)
+	}
+}
+
+func TestRun_GrokNoMatch_EmptyValues(t *testing.T) {
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{
+				ID:       "no-match",
+				Run:      `echo "no numbers here"`,
+				Grok:     []string{"(?P<num>[0-9]+)"},
+				Severity: config.SeverityError,
+			},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 1, false, false)
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(result.Results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result.Results))
+	}
+
+	// When pattern doesn't match, the key should not be present
+	if _, exists := result.Results[0].Extracted["num"]; exists {
+		t.Errorf("expected 'num' to not exist in extracted, got %v", result.Results[0].Extracted)
+	}
+}
+
+func TestRun_GrokInvalidPattern_ReturnsError(t *testing.T) {
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{
+				ID:       "invalid-grok",
+				Run:      `echo "test"`,
+				Grok:     []string{"%{INVALID_PATTERN_XYZ:value}"},
+				Severity: config.SeverityError,
+			},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 1, false, false)
+
+	_, err := orch.Run(context.Background())
+	if err == nil {
+		t.Fatal("expected error for invalid grok pattern, got nil")
+	}
+}
+
+func TestRunCheck_GrokExtractsValues(t *testing.T) {
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{
+				ID:       "single-coverage",
+				Run:      `echo "coverage: 90.0%"`,
+				Grok:     []string{"coverage: (?P<coverage>[0-9.]+)%"},
+				Severity: config.SeverityError,
+			},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 1, false, false)
+
+	result, err := orch.RunCheck(context.Background(), "single-coverage")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(result.Results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result.Results))
+	}
+
+	if result.Results[0].Extracted["coverage"] != "90.0" {
+		t.Errorf("expected coverage=90.0, got %q", result.Results[0].Extracted["coverage"])
+	}
+}
+
+func TestRun_GrokExtractedInViolation(t *testing.T) {
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{
+				ID:         "failing-with-grok",
+				Run:        `echo "coverage: 50.0%" && exit 1`,
+				Grok:       []string{"coverage: (?P<coverage>[0-9.]+)%"},
+				Severity:   config.SeverityError,
+				Suggestion: "Coverage is {{.coverage}}%, needs 80%",
+			},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 1, false, false)
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(result.Violations) != 1 {
+		t.Fatalf("expected 1 violation, got %d", len(result.Violations))
+	}
+
+	// Verify extracted values are propagated to violation
+	if result.Violations[0].Extracted["coverage"] != "50.0" {
+		t.Errorf("expected violation to have coverage=50.0, got %v", result.Violations[0].Extracted)
+	}
+}

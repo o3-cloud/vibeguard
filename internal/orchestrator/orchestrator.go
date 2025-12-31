@@ -11,6 +11,7 @@ import (
 
 	"github.com/vibeguard/vibeguard/internal/config"
 	"github.com/vibeguard/vibeguard/internal/executor"
+	"github.com/vibeguard/vibeguard/internal/grok"
 )
 
 // CheckResult represents the result of evaluating a single check.
@@ -186,14 +187,28 @@ func (o *Orchestrator) Run(ctx context.Context) (*RunResult, error) {
 					return execErr
 				}
 
+				// Apply grok patterns to extract values from output
+				extracted := make(map[string]string)
+				if len(check.Grok) > 0 {
+					matcher, matcherErr := grok.New(check.Grok)
+					if matcherErr != nil {
+						return matcherErr
+					}
+					extracted, matcherErr = matcher.Match(execResult.Combined)
+					if matcherErr != nil {
+						return matcherErr
+					}
+				}
+
 				// For Phase 1, pass/fail is based on exit code only
+				// Phase 2 will add assertion evaluation using extracted values
 				passed := execResult.Success
 
 				result := &CheckResult{
 					Check:     check,
 					Execution: execResult,
 					Passed:    passed,
-					Extracted: make(map[string]string),
+					Extracted: extracted,
 				}
 
 				mu.Lock()
@@ -317,12 +332,25 @@ func (o *Orchestrator) RunCheck(ctx context.Context, checkID string) (*RunResult
 		return nil, err
 	}
 
+	// Apply grok patterns to extract values from output
+	extracted := make(map[string]string)
+	if len(check.Grok) > 0 {
+		matcher, matcherErr := grok.New(check.Grok)
+		if matcherErr != nil {
+			return nil, matcherErr
+		}
+		extracted, matcherErr = matcher.Match(execResult.Combined)
+		if matcherErr != nil {
+			return nil, matcherErr
+		}
+	}
+
 	passed := execResult.Success
 	result := &CheckResult{
 		Check:     check,
 		Execution: execResult,
 		Passed:    passed,
-		Extracted: make(map[string]string),
+		Extracted: extracted,
 	}
 
 	var violations []*Violation

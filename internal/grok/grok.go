@@ -1,20 +1,71 @@
 // Package grok provides pattern matching using grok patterns.
-// This package will be implemented in Phase 2.
+// Grok patterns allow extracting structured data from unstructured text
+// like logs, command output, etc.
 package grok
+
+import (
+	"fmt"
+
+	"github.com/elastic/go-grok"
+)
 
 // Matcher extracts values from text using grok patterns.
 type Matcher struct {
 	patterns []string
+	compiled []*grok.Grok
 }
 
 // New creates a new Matcher with the given patterns.
-func New(patterns []string) *Matcher {
-	return &Matcher{patterns: patterns}
+// Each pattern is compiled eagerly to detect errors early.
+func New(patterns []string) (*Matcher, error) {
+	if len(patterns) == 0 {
+		return &Matcher{
+			patterns: patterns,
+			compiled: nil,
+		}, nil
+	}
+
+	compiled := make([]*grok.Grok, 0, len(patterns))
+	for _, pattern := range patterns {
+		g := grok.New()
+		if err := g.Compile(pattern, true); err != nil {
+			return nil, fmt.Errorf("failed to compile grok pattern %q: %w", pattern, err)
+		}
+		compiled = append(compiled, g)
+	}
+
+	return &Matcher{
+		patterns: patterns,
+		compiled: compiled,
+	}, nil
 }
 
 // Match applies grok patterns to the input and returns extracted values.
-// TODO: Implement using github.com/elastic/go-grok in Phase 2.
+// If multiple patterns are provided, all are applied and their results merged.
+// Later patterns can override values from earlier patterns.
+// Unmatched pattern variables are set to empty strings.
 func (m *Matcher) Match(input string) (map[string]string, error) {
-	// Placeholder implementation
-	return make(map[string]string), nil
+	result := make(map[string]string)
+
+	if len(m.compiled) == 0 {
+		return result, nil
+	}
+
+	for i, g := range m.compiled {
+		values, err := g.ParseString(input)
+		if err != nil {
+			return nil, fmt.Errorf("grok pattern %d failed to parse: %w", i, err)
+		}
+		// Merge extracted values into result
+		for k, v := range values {
+			result[k] = v
+		}
+	}
+
+	return result, nil
+}
+
+// Patterns returns the patterns configured for this matcher.
+func (m *Matcher) Patterns() []string {
+	return m.patterns
 }
