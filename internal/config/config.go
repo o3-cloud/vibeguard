@@ -37,6 +37,9 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("configuration validation failed: %w", err)
 	}
 
+	// Interpolate variables
+	cfg.Interpolate()
+
 	return &cfg, nil
 }
 

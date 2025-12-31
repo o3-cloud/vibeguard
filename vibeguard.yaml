@@ -1,0 +1,40 @@
+version: "1"
+
+vars:
+  go_packages: "./..."
+
+checks:
+  - id: vet
+    run: go vet {{.go_packages}}
+    severity: error
+    suggestion: "Run 'go vet ./...' and fix reported issues"
+    timeout: 60s
+
+  - id: fmt
+    run: test -z "$(gofmt -l .)"
+    severity: error
+    suggestion: "Run 'gofmt -w .' to format code"
+    timeout: 30s
+
+  - id: lint
+    run: golangci-lint run {{.go_packages}}
+    severity: error
+    suggestion: "Run 'golangci-lint run' and fix reported issues"
+    timeout: 120s
+
+  - id: test
+    run: go test -race -cover {{.go_packages}}
+    severity: error
+    suggestion: "Run 'go test ./...' and fix failing tests"
+    timeout: 300s
+    requires:
+      - vet
+      - fmt
+
+  - id: build
+    run: go build {{.go_packages}}
+    severity: error
+    suggestion: "Run 'go build ./...' and fix compilation errors"
+    timeout: 60s
+    requires:
+      - vet

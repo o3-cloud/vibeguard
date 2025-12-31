@@ -1,9 +1,15 @@
 package cli
 
 import (
-	"fmt"
+	"context"
+	"os"
 
 	"github.com/spf13/cobra"
+
+	"github.com/vibeguard/vibeguard/internal/config"
+	"github.com/vibeguard/vibeguard/internal/executor"
+	"github.com/vibeguard/vibeguard/internal/orchestrator"
+	"github.com/vibeguard/vibeguard/internal/output"
 )
 
 var checkCmd = &cobra.Command{
@@ -24,12 +30,45 @@ func init() {
 }
 
 func runCheck(cmd *cobra.Command, args []string) error {
-	// TODO: Implement check command
-	// This will be implemented in subsequent tasks
-	if len(args) > 0 {
-		fmt.Printf("Running check: %s\n", args[0])
-	} else {
-		fmt.Println("Running all checks...")
+	// Load configuration
+	cfg, err := config.Load(configFile)
+	if err != nil {
+		return err
 	}
+
+	// Create executor and orchestrator
+	exec := executor.New("")
+	orch := orchestrator.New(cfg, exec, parallel, failFast, verbose)
+
+	// Create formatter
+	formatter := output.New(os.Stdout, verbose)
+
+	// Run checks
+	ctx := context.Background()
+	var result *orchestrator.RunResult
+
+	if len(args) > 0 {
+		// Run single check
+		result, err = orch.RunCheck(ctx, args[0])
+	} else {
+		// Run all checks
+		result, err = orch.Run(ctx)
+	}
+	if err != nil {
+		return err
+	}
+
+	// Format and output results
+	if jsonOutput {
+		output.FormatJSON(os.Stdout, result)
+	} else {
+		formatter.FormatResult(result)
+	}
+
+	// Exit with appropriate code
+	if result.ExitCode != 0 {
+		os.Exit(result.ExitCode)
+	}
+
 	return nil
 }
