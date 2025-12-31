@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -326,6 +327,205 @@ checks:
 	_, err := Load(configPath)
 	if err == nil {
 		t.Fatal("expected error for self-referencing requires")
+	}
+}
+
+func TestLoad_CyclicDependency_TwoNodes(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "vibeguard.yaml")
+
+	// A requires B, B requires A
+	content := `
+version: "1"
+checks:
+  - id: a
+    run: echo a
+    requires:
+      - b
+  - id: b
+    run: echo b
+    requires:
+      - a
+`
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Load(configPath)
+	if err == nil {
+		t.Fatal("expected error for cyclic dependency")
+	}
+
+	// Check that the error message mentions the cycle
+	errMsg := err.Error()
+	if !strings.Contains(errMsg, "cyclic dependency") {
+		t.Errorf("expected error to mention 'cyclic dependency', got: %s", errMsg)
+	}
+}
+
+func TestLoad_CyclicDependency_ThreeNodes(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "vibeguard.yaml")
+
+	// A requires B, B requires C, C requires A
+	content := `
+version: "1"
+checks:
+  - id: a
+    run: echo a
+    requires:
+      - b
+  - id: b
+    run: echo b
+    requires:
+      - c
+  - id: c
+    run: echo c
+    requires:
+      - a
+`
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Load(configPath)
+	if err == nil {
+		t.Fatal("expected error for cyclic dependency")
+	}
+
+	errMsg := err.Error()
+	if !strings.Contains(errMsg, "cyclic dependency") {
+		t.Errorf("expected error to mention 'cyclic dependency', got: %s", errMsg)
+	}
+}
+
+func TestLoad_CyclicDependency_PartialCycle(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "vibeguard.yaml")
+
+	// A requires B, B requires C, C requires B (cycle is B->C->B, not involving A)
+	content := `
+version: "1"
+checks:
+  - id: a
+    run: echo a
+    requires:
+      - b
+  - id: b
+    run: echo b
+    requires:
+      - c
+  - id: c
+    run: echo c
+    requires:
+      - b
+`
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Load(configPath)
+	if err == nil {
+		t.Fatal("expected error for cyclic dependency")
+	}
+
+	errMsg := err.Error()
+	if !strings.Contains(errMsg, "cyclic dependency") {
+		t.Errorf("expected error to mention 'cyclic dependency', got: %s", errMsg)
+	}
+}
+
+func TestLoad_NoCycle_ValidDAG(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "vibeguard.yaml")
+
+	// Valid DAG: D requires B and C, B requires A, C requires A
+	content := `
+version: "1"
+checks:
+  - id: a
+    run: echo a
+  - id: b
+    run: echo b
+    requires:
+      - a
+  - id: c
+    run: echo c
+    requires:
+      - a
+  - id: d
+    run: echo d
+    requires:
+      - b
+      - c
+`
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("expected no error for valid DAG, got: %v", err)
+	}
+
+	if len(cfg.Checks) != 4 {
+		t.Errorf("expected 4 checks, got: %d", len(cfg.Checks))
+	}
+}
+
+func TestLoad_NoCycle_DiamondDependency(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "vibeguard.yaml")
+
+	// Diamond: A <- B, A <- C, B <- D, C <- D (D depends on both B and C which both depend on A)
+	content := `
+version: "1"
+checks:
+  - id: a
+    run: echo a
+  - id: b
+    run: echo b
+    requires:
+      - a
+  - id: c
+    run: echo c
+    requires:
+      - a
+  - id: d
+    run: echo d
+    requires:
+      - b
+      - c
+`
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("expected no error for diamond dependency, got: %v", err)
+	}
+
+	if len(cfg.Checks) != 4 {
+		t.Errorf("expected 4 checks, got: %d", len(cfg.Checks))
+	}
+}
+
+func TestFormatCycle(t *testing.T) {
+	tests := []struct {
+		path     []string
+		expected string
+	}{
+		{[]string{"a", "a"}, "a -> a"},
+		{[]string{"a", "b", "a"}, "a -> b -> a"},
+		{[]string{"a", "b", "c", "a"}, "a -> b -> c -> a"},
+	}
+
+	for _, tt := range tests {
+		result := formatCycle(tt.path)
+		if result != tt.expected {
+			t.Errorf("formatCycle(%v) = %q, expected %q", tt.path, result, tt.expected)
+		}
 	}
 }
 

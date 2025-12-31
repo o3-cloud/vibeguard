@@ -149,7 +149,85 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	// Validate no cyclic dependencies
+	if err := c.validateNoCycles(); err != nil {
+		return err
+	}
+
 	return nil
+}
+
+// validateNoCycles checks for cyclic dependencies in the requires graph.
+// It uses DFS with three states: unvisited, visiting (in current path), and visited (fully processed).
+func (c *Config) validateNoCycles() error {
+	// Build adjacency list: check ID -> list of required check IDs
+	graph := make(map[string][]string)
+	for _, check := range c.Checks {
+		graph[check.ID] = check.Requires
+	}
+
+	// Track visited state: 0 = unvisited, 1 = visiting (in current path), 2 = visited
+	state := make(map[string]int)
+
+	// Track the current path for error reporting
+	var path []string
+
+	// DFS function to detect cycles
+	var dfs func(id string) error
+	dfs = func(id string) error {
+		if state[id] == 2 {
+			// Already fully visited, no cycle through this node
+			return nil
+		}
+		if state[id] == 1 {
+			// Found a cycle - build cycle description
+			cycleStart := -1
+			for i, p := range path {
+				if p == id {
+					cycleStart = i
+					break
+				}
+			}
+			cyclePath := append(path[cycleStart:], id)
+			return fmt.Errorf("cyclic dependency detected: %s", formatCycle(cyclePath))
+		}
+
+		// Mark as visiting
+		state[id] = 1
+		path = append(path, id)
+
+		// Visit all dependencies
+		for _, reqID := range graph[id] {
+			if err := dfs(reqID); err != nil {
+				return err
+			}
+		}
+
+		// Mark as fully visited
+		state[id] = 2
+		path = path[:len(path)-1]
+		return nil
+	}
+
+	// Run DFS from each unvisited node
+	for _, check := range c.Checks {
+		if state[check.ID] == 0 {
+			if err := dfs(check.ID); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+// formatCycle formats a cycle path for display (e.g., "a -> b -> c -> a").
+func formatCycle(path []string) string {
+	result := path[0]
+	for i := 1; i < len(path); i++ {
+		result += " -> " + path[i]
+	}
+	return result
 }
 
 // UnmarshalYAML implements custom YAML unmarshaling for GrokSpec.
