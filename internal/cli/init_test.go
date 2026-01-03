@@ -167,6 +167,257 @@ func TestRunAssist_OutputToFile(t *testing.T) {
 	}
 }
 
+func TestRunInit_CreateDefault(t *testing.T) {
+	// Create a temp directory for the test
+	tmpDir, err := os.MkdirTemp("", "vibeguard-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	// Change to temp dir
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get working directory: %v", err)
+	}
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("failed to change to temp dir: %v", err)
+	}
+	defer func() { _ = os.Chdir(oldWd) }()
+
+	// Save and restore flag state
+	oldForce := initForce
+	oldTemplate := initTemplate
+	oldAssist := initAssist
+	defer func() {
+		initForce = oldForce
+		initTemplate = oldTemplate
+		initAssist = oldAssist
+	}()
+
+	initForce = false
+	initTemplate = ""
+	initAssist = false
+
+	// Run init command
+	err = runInit(initCmd, []string{})
+	if err != nil {
+		t.Fatalf("runInit failed: %v", err)
+	}
+
+	// Verify the file was created
+	content, err := os.ReadFile("vibeguard.yaml")
+	if err != nil {
+		t.Fatalf("failed to read created config: %v", err)
+	}
+
+	// Verify it contains expected content
+	if !strings.Contains(string(content), "version:") {
+		t.Error("created config missing version field")
+	}
+	if !strings.Contains(string(content), "checks:") {
+		t.Error("created config missing checks field")
+	}
+}
+
+func TestRunInit_WithTemplate(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "vibeguard-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get working directory: %v", err)
+	}
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("failed to change to temp dir: %v", err)
+	}
+	defer func() { _ = os.Chdir(oldWd) }()
+
+	oldForce := initForce
+	oldTemplate := initTemplate
+	oldAssist := initAssist
+	defer func() {
+		initForce = oldForce
+		initTemplate = oldTemplate
+		initAssist = oldAssist
+	}()
+
+	initForce = false
+	initTemplate = "go-minimal"
+	initAssist = false
+
+	err = runInit(initCmd, []string{})
+	if err != nil {
+		t.Fatalf("runInit with template failed: %v", err)
+	}
+
+	// Verify the file was created
+	if _, err := os.Stat("vibeguard.yaml"); os.IsNotExist(err) {
+		t.Error("config file was not created")
+	}
+}
+
+func TestRunInit_UnknownTemplate(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "vibeguard-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get working directory: %v", err)
+	}
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("failed to change to temp dir: %v", err)
+	}
+	defer func() { _ = os.Chdir(oldWd) }()
+
+	oldForce := initForce
+	oldTemplate := initTemplate
+	oldAssist := initAssist
+	defer func() {
+		initForce = oldForce
+		initTemplate = oldTemplate
+		initAssist = oldAssist
+	}()
+
+	initForce = false
+	initTemplate = "nonexistent-template"
+	initAssist = false
+
+	err = runInit(initCmd, []string{})
+	if err == nil {
+		t.Fatal("expected error for unknown template")
+	}
+	if !strings.Contains(err.Error(), "unknown template") {
+		t.Errorf("expected 'unknown template' in error message, got: %v", err)
+	}
+}
+
+func TestRunInit_AlreadyExists(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "vibeguard-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	// Create an existing config
+	existingConfig := filepath.Join(tmpDir, "vibeguard.yaml")
+	if err := os.WriteFile(existingConfig, []byte("existing"), 0644); err != nil {
+		t.Fatalf("failed to create existing config: %v", err)
+	}
+
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get working directory: %v", err)
+	}
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("failed to change to temp dir: %v", err)
+	}
+	defer func() { _ = os.Chdir(oldWd) }()
+
+	oldForce := initForce
+	oldTemplate := initTemplate
+	oldAssist := initAssist
+	defer func() {
+		initForce = oldForce
+		initTemplate = oldTemplate
+		initAssist = oldAssist
+	}()
+
+	initForce = false
+	initTemplate = ""
+	initAssist = false
+
+	err = runInit(initCmd, []string{})
+	if err == nil {
+		t.Fatal("expected error when config already exists")
+	}
+	if !strings.Contains(err.Error(), "already exists") {
+		t.Errorf("expected 'already exists' in error message, got: %v", err)
+	}
+}
+
+func TestRunInit_ForceOverwrite(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "vibeguard-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	// Create an existing config
+	existingConfig := filepath.Join(tmpDir, "vibeguard.yaml")
+	if err := os.WriteFile(existingConfig, []byte("old content"), 0644); err != nil {
+		t.Fatalf("failed to create existing config: %v", err)
+	}
+
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get working directory: %v", err)
+	}
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("failed to change to temp dir: %v", err)
+	}
+	defer func() { _ = os.Chdir(oldWd) }()
+
+	oldForce := initForce
+	oldTemplate := initTemplate
+	oldAssist := initAssist
+	defer func() {
+		initForce = oldForce
+		initTemplate = oldTemplate
+		initAssist = oldAssist
+	}()
+
+	initForce = true
+	initTemplate = ""
+	initAssist = false
+
+	err = runInit(initCmd, []string{})
+	if err != nil {
+		t.Fatalf("runInit with --force failed: %v", err)
+	}
+
+	// Verify content was overwritten
+	content, err := os.ReadFile(existingConfig)
+	if err != nil {
+		t.Fatalf("failed to read config: %v", err)
+	}
+	if string(content) == "old content" {
+		t.Error("config was not overwritten")
+	}
+}
+
+func TestListTemplates(t *testing.T) {
+	// Just verify listTemplates() doesn't error
+	err := listTemplates()
+	if err != nil {
+		t.Errorf("listTemplates failed: %v", err)
+	}
+}
+
+func TestRunInit_ListTemplates(t *testing.T) {
+	oldTemplate := initTemplate
+	oldAssist := initAssist
+	defer func() {
+		initTemplate = oldTemplate
+		initAssist = oldAssist
+	}()
+
+	initTemplate = "list"
+	initAssist = false
+
+	// This should call listTemplates() and return nil
+	err := runInit(initCmd, []string{})
+	if err != nil {
+		t.Errorf("runInit with --template list failed: %v", err)
+	}
+}
+
 func TestRunAssist_NotADirectory(t *testing.T) {
 	// Create a temp file (not a directory)
 	tmpFile, err := os.CreateTemp("", "vibeguard-test-*")
