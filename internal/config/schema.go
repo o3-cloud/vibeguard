@@ -21,6 +21,7 @@ type Check struct {
 	Assert     string   `yaml:"assert"`
 	Severity   Severity `yaml:"severity"`
 	Suggestion string   `yaml:"suggestion"`
+	Fix        string   `yaml:"fix,omitempty"`
 	Requires   []string `yaml:"requires"`
 	Timeout    Duration `yaml:"timeout"`
 }
