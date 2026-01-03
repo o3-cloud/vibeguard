@@ -85,9 +85,10 @@ Each check in the **checks** array must follow this structure:
 
 ### Required Fields
 - **id** (string, required): Unique identifier for the check
-  - Must be alphanumeric with underscores and hyphens allowed
+  - Must start with a letter or underscore
+  - Can contain letters, numbers, underscores, and hyphens
   - Must be unique across all checks
-  - Examples: "fmt", "lint", "go-test", "npm_audit"
+  - Examples: "fmt", "lint", "go-test", "npm_audit", "_private"
 
 - **run** (string, required): Shell command to execute
   - Must be non-empty

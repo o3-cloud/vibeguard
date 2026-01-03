@@ -1121,3 +1121,96 @@ func TestIsExecutionError(t *testing.T) {
 		})
 	}
 }
+
+func TestLoad_InvalidCheckID(t *testing.T) {
+	tests := []struct {
+		name    string
+		id      string
+		wantErr bool
+	}{
+		// Valid IDs
+		{name: "simple lowercase", id: "test", wantErr: false},
+		{name: "simple uppercase", id: "TEST", wantErr: false},
+		{name: "mixed case", id: "myTest", wantErr: false},
+		{name: "with underscore", id: "go_test", wantErr: false},
+		{name: "with hyphen", id: "go-test", wantErr: false},
+		{name: "with numbers", id: "test123", wantErr: false},
+		{name: "underscore prefix", id: "_private", wantErr: false},
+		{name: "complex valid", id: "Go_Test-123", wantErr: false},
+		{name: "single letter", id: "a", wantErr: false},
+		{name: "single underscore prefix", id: "_", wantErr: false},
+
+		// Invalid IDs
+		{name: "starts with number", id: "123test", wantErr: true},
+		{name: "starts with hyphen", id: "-test", wantErr: true},
+		{name: "contains space", id: "go test", wantErr: true},
+		{name: "contains dot", id: "go.test", wantErr: true},
+		{name: "contains colon", id: "go:test", wantErr: true},
+		{name: "contains slash", id: "go/test", wantErr: true},
+		{name: "contains special char", id: "test@check", wantErr: true},
+		{name: "unicode characters", id: "tëst", wantErr: true},
+		{name: "emoji", id: "test🚀", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			configPath := filepath.Join(dir, "vibeguard.yaml")
+
+			content := `
+version: "1"
+checks:
+  - id: ` + tt.id + `
+    run: echo hello
+`
+			if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+				t.Fatal(err)
+			}
+
+			_, err := Load(configPath)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("expected error for invalid check ID %q, got nil", tt.id)
+				} else if !strings.Contains(err.Error(), "invalid id format") {
+					t.Errorf("expected 'invalid id format' error, got: %v", err)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("unexpected error for valid check ID %q: %v", tt.id, err)
+				}
+			}
+		})
+	}
+}
+
+func TestValidCheckIDRegex(t *testing.T) {
+	// Direct regex tests for edge cases
+	tests := []struct {
+		id    string
+		valid bool
+	}{
+		{"a", true},
+		{"A", true},
+		{"_", true},
+		{"_a", true},
+		{"a1", true},
+		{"a-b", true},
+		{"a_b", true},
+		{"A-B_c123", true},
+		{"", false},
+		{"1", false},
+		{"1a", false},
+		{"-a", false},
+		{"a b", false},
+		{"a.b", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.id, func(t *testing.T) {
+			got := validCheckID.MatchString(tt.id)
+			if got != tt.valid {
+				t.Errorf("validCheckID.MatchString(%q) = %v, want %v", tt.id, got, tt.valid)
+			}
+		})
+	}
+}

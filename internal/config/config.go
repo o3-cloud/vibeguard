@@ -4,10 +4,16 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"regexp"
 	"time"
 
 	"gopkg.in/yaml.v3"
 )
+
+// validCheckID matches alphanumeric characters, underscores, and hyphens.
+// IDs must start with a letter or underscore, followed by any combination of
+// alphanumeric characters, underscores, or hyphens.
+var validCheckID = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_-]*$`)
 
 // ConfigError represents a configuration error that should result in exit code 2.
 type ConfigError struct {
@@ -163,6 +169,12 @@ func (c *Config) Validate() error {
 			return &ConfigError{
 				Message: fmt.Sprintf("check at index %d has no id", i),
 				LineNum: c.FindCheckNodeLine("", i),
+			}
+		}
+		if !validCheckID.MatchString(check.ID) {
+			return &ConfigError{
+				Message: fmt.Sprintf("check %q has invalid id format: must start with a letter or underscore, followed by alphanumeric characters, underscores, or hyphens", check.ID),
+				LineNum: c.FindCheckNodeLine(check.ID, i),
 			}
 		}
 		if checkIDs[check.ID] {
