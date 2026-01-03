@@ -378,14 +378,13 @@ func (d *Detector) findFiles(pattern string, maxDepth int) ([]string, error) {
 		relPath, _ := filepath.Rel(d.root, path)
 		depth := 0
 		if relPath != "." {
-			depth = len(filepath.SplitList(relPath))
-			// Count path separators for depth
+			// Count path separators to determine depth
 			for _, c := range relPath {
 				if c == filepath.Separator {
 					depth++
 				}
 			}
-			depth++ // Add 1 for the file itself
+			depth++ // Add 1 for the file/dir itself
 		}
 
 		// Skip if too deep
