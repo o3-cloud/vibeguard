@@ -6,6 +6,27 @@ import (
 	"text/template"
 )
 
+// SECURITY MODEL FOR VARIABLE INTERPOLATION
+//
+// Variables in vibeguard.yaml are defined by the same person who writes the check
+// commands. The config author has full control over both variable values AND what
+// commands execute. This means:
+//
+// 1. Shell metacharacters are intentionally NOT escaped - the config author can
+//    already execute arbitrary commands via the 'run' field
+// 2. There is no external/untrusted input - variables come only from the static
+//    YAML config file, not from environment variables or user input at runtime
+// 3. The trust boundary is at the config file level, not the variable level
+//
+// Grok-extracted values (from command output) are ONLY used for display purposes
+// in suggestions and fix messages. They are NEVER used in command execution.
+//
+// This design allows legitimate uses like:
+//   vars:
+//     packages: "./cmd/... ./internal/..."
+//   checks:
+//     - run: go test {{.packages}}
+
 // Interpolate replaces {{.VAR}} placeholders in the config with variable values.
 func (c *Config) Interpolate() {
 	for i := range c.Checks {

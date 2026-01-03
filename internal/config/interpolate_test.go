@@ -254,6 +254,118 @@ func TestInterpolateNilVars(t *testing.T) {
 	}
 }
 
+// TestInterpolateShellMetacharacters documents the security model for shell metacharacters.
+//
+// SECURITY MODEL:
+// Variables are defined in the vibeguard.yaml config file by the same person who writes
+// the check commands. This means there is no external/untrusted input - the config author
+// has full control over both variable values AND what commands execute.
+//
+// Shell metacharacters in variable values are intentionally NOT escaped because:
+// 1. The config author can directly put any command in the 'run' field
+// 2. Escaping would break legitimate use cases like: packages: "./cmd/... ./internal/..."
+// 3. The trust boundary is at the config file level, not the variable level
+//
+// This test documents that metacharacters pass through, which is by design.
+func TestInterpolateShellMetacharacters(t *testing.T) {
+	tests := []struct {
+		name          string
+		varValue      string
+		template      string
+		expected      string
+		documentation string
+	}{
+		{
+			name:          "semicolon in variable (legitimate: multiple paths)",
+			varValue:      "file1.go; file2.go",
+			template:      "cat {{.files}}",
+			expected:      "cat file1.go; file2.go",
+			documentation: "Semicolons are preserved - needed for multi-file patterns",
+		},
+		{
+			name:          "backticks in variable",
+			varValue:      "`echo test`",
+			template:      "echo {{.val}}",
+			expected:      "echo `echo test`",
+			documentation: "Command substitution preserved - config author controls both vars and commands",
+		},
+		{
+			name:          "dollar expansion in variable",
+			varValue:      "$(whoami)",
+			template:      "echo {{.val}}",
+			expected:      "echo $(whoami)",
+			documentation: "Shell expansion preserved - config author has full control",
+		},
+		{
+			name:          "pipes in variable (legitimate: command chains)",
+			varValue:      "foo | bar",
+			template:      "{{.cmd}}",
+			expected:      "foo | bar",
+			documentation: "Pipes preserved - enables complex command patterns",
+		},
+		{
+			name:          "glob patterns (legitimate use case)",
+			varValue:      "./cmd/... ./internal/...",
+			template:      "go test {{.packages}}",
+			expected:      "go test ./cmd/... ./internal/...",
+			documentation: "Primary use case - Go package patterns with dots and slashes",
+		},
+		{
+			name:          "quotes in variable",
+			varValue:      `"hello world"`,
+			template:      "echo {{.msg}}",
+			expected:      `echo "hello world"`,
+			documentation: "Quotes preserved for commands needing quoted arguments",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Config{
+				Vars: map[string]string{"files": tt.varValue, "val": tt.varValue, "cmd": tt.varValue, "packages": tt.varValue, "msg": tt.varValue},
+				Checks: []Check{
+					{
+						ID:  "test",
+						Run: tt.template,
+					},
+				},
+			}
+
+			cfg.Interpolate()
+
+			if cfg.Checks[0].Run != tt.expected {
+				t.Errorf("interpolation failed:\n  got:  %q\n  want: %q\n  note: %s",
+					cfg.Checks[0].Run, tt.expected, tt.documentation)
+			}
+		})
+	}
+}
+
+// TestInterpolateWithExtractedSecurityNote documents that grok-extracted values
+// are ONLY used for display purposes (suggestions/fix messages), NOT for command execution.
+func TestInterpolateWithExtractedSecurityNote(t *testing.T) {
+	// Simulate what could be malicious output captured by grok
+	maliciousOutput := "; rm -rf /"
+
+	// This is used for DISPLAY purposes only (suggestions, fix messages)
+	// It is NOT used in command execution
+	suggestion := InterpolateWithExtracted(
+		"Fix the error in {{.file}}",
+		nil,
+		map[string]string{"file": maliciousOutput},
+	)
+
+	// The value is interpolated but only shown to user, never executed
+	expected := "Fix the error in ; rm -rf /"
+	if suggestion != expected {
+		t.Errorf("InterpolateWithExtracted() = %q, want %q", suggestion, expected)
+	}
+
+	// NOTE: This extracted value is never passed to the executor.
+	// The 'run' command is interpolated BEFORE execution using only
+	// config vars (from vibeguard.yaml), not extracted values.
+}
+
 func TestInterpolateWithExtracted_InvalidTemplate(t *testing.T) {
 	// Test with an invalid Go template (unclosed action)
 	invalidTemplate := "value is {{.unclosed"
