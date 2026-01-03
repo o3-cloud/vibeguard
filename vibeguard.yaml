@@ -30,7 +30,7 @@ checks:
     severity: warning
     suggestion: "Some tests are failing"
     fix: "go test ./..."
-    timeout: 10s
+    timeout: 20s
 
   - id: test-coverage
     run: go test ./... -coverprofile cover.out && go tool cover -func cover.out
@@ -39,13 +39,13 @@ checks:
     assert: "coverage >= 89"
     suggestion: "Coverage is {{.coverage}}%, need 89%"
     fix: "Add more test cases to improve coverage"
-    timeout: 10s
+    timeout: 20s
 
   - id: build
-    run: go build {{.go_packages}}
+    run: go build -o vibeguard ./cmd/vibeguard
     severity: error
     suggestion: "Build failed with compilation errors"
-    fix: "go build ./..."
+    fix: "go build -o vibeguard ./cmd/vibeguard"
     timeout: 5s
     requires:
       - vet

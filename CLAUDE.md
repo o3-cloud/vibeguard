@@ -38,6 +38,11 @@ Major architectural decisions are documented as Architecture Decision Records (A
   - Standard, universal mechanism that works with any editor or development tool
   - Catches policy violations before code is committed without tool-specific dependencies
 
+- **[ADR-007: Adopt Gremlins for Mutation Testing](docs/adr/ADR-007-adopt-mutation-testing.md)**
+  - Decision to use Gremlins for mutation testing to measure test suite effectiveness beyond code coverage
+  - Complements ADR-004 coverage requirements by identifying weak or missing assertions
+  - YAML-based configuration with PR-diff support for faster CI feedback
+
 ## Project Skills
 
 The `.claude/skills/` directory contains Claude Code skills that automate common workflows:

@@ -12,7 +12,7 @@ generate a valid configuration.
 
 **Project Name:** github.com/vibeguard/vibeguard
 **Project Type:** go
-**Detection Confidence:** 80%
+**Detection Confidence:** 100%
 
 ### Main Tools Detected:
 - golangci-lint
