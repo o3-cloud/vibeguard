@@ -541,6 +541,121 @@ checks:
       - vet  # build only runs if vet passes
 ```
 
+## Execution Model
+
+VibeGuard uses a sophisticated execution model to efficiently run checks while respecting dependencies and resource constraints.
+
+### Dependency Graph and Topological Ordering
+
+Checks form a directed acyclic graph (DAG) based on their `requires` declarations. VibeGuard builds this graph and uses **Kahn's algorithm** for topological sorting to determine the execution order:
+
+1. **Circular dependency detection** — The system validates that no circular dependencies exist before execution begins
+2. **Level-based execution** — Checks are organized into levels where each level contains checks with no unprocessed dependencies
+3. **Deterministic ordering** — The execution order is consistent and predictable across runs
+
+For example, with this configuration:
+
+```yaml
+checks:
+  - id: vet
+    run: go vet ./...
+
+  - id: fmt
+    run: go fmt ./...
+
+  - id: build
+    run: go build ./...
+    requires:
+      - vet
+      - fmt
+
+  - id: test
+    run: go test ./...
+    requires:
+      - build
+```
+
+The execution proceeds in **3 levels**:
+- **Level 1** (parallel): `vet` and `fmt` run simultaneously
+- **Level 2** (parallel): `build` runs after both `vet` and `fmt` complete
+- **Level 3** (sequential): `test` runs after `build` completes
+
+### Parallel Execution
+
+Within each level, checks are executed **in parallel** to maximize efficiency:
+
+- **`--parallel` flag** — Controls the maximum number of concurrent checks (default: 4)
+  - `--parallel 1` — Run checks sequentially
+  - `--parallel 8` — Allow up to 8 concurrent checks per level
+  - Higher values increase throughput but consume more resources
+
+Each check acquires a semaphore before execution. When the limit is reached, subsequent checks wait for earlier ones to complete before starting.
+
+Example:
+```bash
+vibeguard check --parallel 8  # Increase concurrency for faster execution
+```
+
+### Fail-Fast Behavior
+
+The `--fail-fast` flag stops execution on the first error-severity violation:
+
+```bash
+vibeguard check --fail-fast
+```
+
+**Behavior:**
+- When an error-severity check fails, no further levels are executed
+- In-flight checks (already started) in the current level continue to completion
+- The exit code reflects the failure (exit code 3 for violations, 4 for timeouts)
+- Useful in CI/CD pipelines where fast feedback on failures is important
+
+**Example:**
+```yaml
+checks:
+  - id: fmt
+    run: go fmt ./...  # error severity (default)
+
+  - id: vet
+    run: go vet ./...  # error severity (default)
+
+  - id: test
+    run: go test ./...
+    requires:
+      - fmt
+      - vet
+```
+
+With `--fail-fast`:
+- If `fmt` fails, `vet` continues (same level)
+- Both `fmt` and `vet` complete
+- If either failed with error severity, `test` **does not run** (next level is skipped)
+
+### Dependency Validation
+
+Before a check executes, the orchestrator validates that all required dependencies have **passed**:
+
+- **Passed dependency** — Required check passed all assertions and exited with success
+- **Failed dependency** — Check skipped with reason "Skipped: required dependency failed"
+- **No re-execution** — Dependencies are not re-run; each check executes exactly once
+
+### Timeout Handling
+
+Each check can have an individual timeout:
+
+```yaml
+checks:
+  - id: integration-test
+    run: ./run-integration-tests.sh
+    timeout: 5m  # 5 minutes
+```
+
+**Timeout behavior:**
+- Check execution is cancelled if it exceeds the timeout
+- The check is marked as failed with `timedout: true`
+- Timeouts return exit code 4 (takes precedence over error violations)
+- Default timeout is 30 seconds if not specified
+
 ## Implementation Patterns
 
 VibeGuard supports multiple implementation patterns:
