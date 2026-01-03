@@ -182,9 +182,11 @@ func (d *Detector) detectPython() (*DetectionResult, error) {
 		Indicators: []string{},
 	}
 
-	// Check for pyproject.toml (strongest indicator - 0.5)
+	// Check for pyproject.toml (strongest indicator - 0.6)
+	// pyproject.toml is the modern standard manifest (PEP 517/518/621),
+	// equivalent to go.mod or package.json in their ecosystems
 	if d.fileExists("pyproject.toml") {
-		result.Confidence += 0.5
+		result.Confidence += 0.6
 		result.Indicators = append(result.Indicators, "pyproject.toml")
 	}
 

@@ -234,8 +234,8 @@ func TestDetector_DetectPython(t *testing.T) {
 				"pyproject.toml": "[tool.poetry]\nname = \"test\"",
 				"main.py":        "print('hello')",
 			},
-			minConfidence:  0.7,
-			maxConfidence:  0.75,
+			minConfidence:  0.8,
+			maxConfidence:  0.85,
 			expectDetected: true,
 		},
 		{
