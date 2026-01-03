@@ -141,6 +141,32 @@ vibeguard validate          # Validate the default config file
 vibeguard validate -c prod.yaml  # Validate a specific config file
 ```
 
+## Exit Codes
+
+VibeGuard uses the following exit codes to indicate the result of check execution. This is particularly useful for CI/CD integration and automated workflows where exit codes determine the success or failure of a step.
+
+| Exit Code | Name | Description |
+|-----------|------|-------------|
+| 0 | Success | All checks passed successfully |
+| 2 | ConfigError | Configuration file error (invalid YAML, validation failure, etc.) |
+| 3 | Violation | One or more error-severity violations detected during execution |
+| 4 | Timeout | Check execution error (timeout exceeded, command not found, etc.) |
+
+### CI/CD Integration
+
+When integrating VibeGuard into CI/CD pipelines:
+
+- **Exit code 0** — Pipeline can proceed
+- **Exit codes ≥ 2** — Pipeline is blocked (suitable for pre-commit hooks and CI checks)
+
+Example with GitHub Actions:
+
+```yaml
+- name: Run VibeGuard checks
+  run: vibeguard check
+  # Automatically fails the step if exit code >= 1
+```
+
 ## Configuration Schema
 
 VibeGuard configurations are written in YAML. Here's the complete schema:
