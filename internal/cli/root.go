@@ -2,16 +2,20 @@
 package cli
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
+	"github.com/vibeguard/vibeguard/internal/version"
 )
 
 var (
 	// Flags
-	configFile string
-	verbose    bool
-	jsonOutput bool
-	parallel   int
-	failFast   bool
+	configFile  string
+	verbose     bool
+	jsonOutput  bool
+	parallel    int
+	failFast    bool
+	showVersion bool
 )
 
 // rootCmd is the base command for vibeguard
@@ -32,6 +36,13 @@ Core principles:
 	// SilenceUsage prevents showing help text when commands return errors.
 	// Usage should only be shown for invalid arguments/flags, not execution errors.
 	SilenceUsage: true,
+	Run: func(cmd *cobra.Command, args []string) {
+		if showVersion {
+			fmt.Println(version.String())
+			return
+		}
+		_ = cmd.Help()
+	},
 }
 
 // Execute runs the root command
@@ -41,6 +52,7 @@ func Execute() error {
 
 func init() {
 	// Global flags
+	rootCmd.Flags().BoolVar(&showVersion, "version", false, "Show version")
 	rootCmd.PersistentFlags().StringVarP(&configFile, "config", "c", "", "Path to config file")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Show all check results, not just failures")
 	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
