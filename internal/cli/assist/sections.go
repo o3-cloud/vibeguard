@@ -88,6 +88,9 @@ func RecommendationsSection(recommendations []CheckRecommendation) PromptSection
 		sb.WriteString(fmt.Sprintf("**Description:** %s\n", rec.Description))
 		sb.WriteString(fmt.Sprintf("**Rationale:** %s\n", rec.Rationale))
 		sb.WriteString(fmt.Sprintf("**Command:** `%s`\n", rec.Command))
+		if rec.File != "" {
+			sb.WriteString(fmt.Sprintf("**File:** `%s`\n", rec.File))
+		}
 		sb.WriteString(fmt.Sprintf("**Severity:** %s\n", rec.Severity))
 		if len(rec.Grok) > 0 {
 			sb.WriteString(fmt.Sprintf("**Grok Patterns:** %s\n", formatGrokPatterns(rec.Grok)))

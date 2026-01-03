@@ -8,6 +8,7 @@ type CheckRecommendation struct {
 	Description string   // Human-readable description of what the check does
 	Rationale   string   // Why this check is recommended
 	Command     string   // Shell command to execute
+	File        string   // File to read output from instead of command stdout
 	Grok        []string // Optional grok patterns for output extraction
 	Assert      string   // Optional assertion expression
 	Severity    string   // "error" or "warning"

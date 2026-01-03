@@ -64,6 +64,7 @@ func convertToAssistRecommendations(recs []CheckRecommendation) []assist.CheckRe
 			Description: r.Description,
 			Rationale:   r.Rationale,
 			Command:     r.Command,
+			File:        r.File,
 			Grok:        r.Grok,
 			Assert:      r.Assert,
 			Severity:    r.Severity,

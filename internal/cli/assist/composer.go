@@ -32,6 +32,7 @@ type CheckRecommendation struct {
 	Description string
 	Rationale   string
 	Command     string
+	File        string // File to read output from instead of command stdout
 	Grok        []string
 	Assert      string
 	Severity    string
