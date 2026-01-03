@@ -381,6 +381,71 @@ func TestEvaluator_ParseErrorContext(t *testing.T) {
 	}
 }
 
+// TestParser_FormatErrorPointerPosition kills mutations at parser.go:37
+// that change the loop conditions for building the error pointer.
+// The pointer should point to the exact position of the error.
+// The loop builds `pos-1` spaces then adds ^, so position N has N-1 spaces.
+func TestParser_FormatErrorPointerPosition(t *testing.T) {
+	tests := []struct {
+		name           string
+		expr           string
+		wantPointerPos int // position of ^ relative to start of expression line (pos-1)
+	}{
+		{
+			name:           "error at position 1",
+			expr:           "@",
+			wantPointerPos: 0, // pos=1, so 0 spaces before ^
+		},
+		{
+			name:           "error at position 6",
+			expr:           "10 + @",
+			wantPointerPos: 4, // pos=5, so 4 spaces before ^ (pointing at @)
+		},
+		{
+			name:           "error in middle of long expr",
+			expr:           "a && b && @",
+			wantPointerPos: 9, // pos=10, so 9 spaces before ^
+		},
+		{
+			name:           "error at position 3",
+			expr:           "a +@",
+			wantPointerPos: 2, // pos=3, so 2 spaces before ^ (pointing at @)
+		},
+	}
+
+	e := New()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := e.Eval(tt.expr, nil)
+			if err == nil {
+				t.Fatalf("expected error for %q, got nil", tt.expr)
+			}
+			errStr := err.Error()
+
+			// Find the line with the pointer (^)
+			lines := strings.Split(errStr, "\n")
+			var pointerLine string
+			for _, line := range lines {
+				if strings.Contains(line, "^") && !strings.Contains(line, "unexpected") {
+					pointerLine = line
+					break
+				}
+			}
+			if pointerLine == "" {
+				t.Fatalf("no pointer line found in error: %q", errStr)
+			}
+
+			// The pointer line is indented with "  " (2 spaces), then spaces, then ^
+			// Count spaces before ^ (excluding the leading "  " indent)
+			pointerLine = strings.TrimPrefix(pointerLine, "  ")
+			pointerPos := strings.Index(pointerLine, "^")
+			if pointerPos != tt.wantPointerPos {
+				t.Errorf("pointer position = %d, want %d\nerror: %s", pointerPos, tt.wantPointerPos, errStr)
+			}
+		})
+	}
+}
+
 func TestEvaluator_ShortCircuit(t *testing.T) {
 	// Test that short-circuit evaluation works properly
 	// If short-circuit is working, undefined variable access won't cause issues
@@ -486,6 +551,89 @@ func TestEvaluator_SingleQuoteStrings(t *testing.T) {
 	}
 	if !result {
 		t.Error("expected single-quoted string comparison to work")
+	}
+}
+
+// TestEvaluator_LessThanBoundary kills mutation at eval.go:215
+// that changes `cmp < 0` to `cmp <= 0` in the less-than comparison.
+// This test ensures that equal values return false for <.
+func TestEvaluator_LessThanBoundary(t *testing.T) {
+	e := New()
+
+	// When values are equal, < should return false
+	result, err := e.Eval("10 < 10", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result {
+		t.Error("10 < 10 should be false, not true (boundary condition)")
+	}
+
+	// Also test with floats to be thorough
+	result, err = e.Eval("3.14 < 3.14", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result {
+		t.Error("3.14 < 3.14 should be false, not true (boundary condition)")
+	}
+
+	// Test with variables
+	result, err = e.Eval("x < x", map[string]string{"x": "42"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result {
+		t.Error("x < x should be false when x equals x (boundary condition)")
+	}
+}
+
+// TestFormatFloat_Precision kills mutations at eval.go:276
+// that change the precision parameter from -1 to other values.
+// The -1 precision means "smallest number of digits necessary".
+func TestFormatFloat_Precision(t *testing.T) {
+	// Test that formatFloat preserves full precision for fractional numbers
+	// If precision is changed from -1 to 1, "3.14" would become "3.1"
+	tests := []struct {
+		name     string
+		expr     string
+		vars     map[string]string
+		wantTrue bool
+	}{
+		{
+			name:     "preserves multiple decimal places",
+			expr:     "x == 3.14159",
+			vars:     map[string]string{"x": "3.14159"},
+			wantTrue: true,
+		},
+		{
+			name:     "arithmetic preserves precision",
+			expr:     "1.5 + 1.25 == 2.75",
+			wantTrue: true,
+		},
+		{
+			name:     "division result precision",
+			expr:     "7 / 4 == 1.75",
+			wantTrue: true,
+		},
+		{
+			name:     "negative with precision",
+			expr:     "-3.14159 == -3.14159",
+			wantTrue: true,
+		},
+	}
+
+	e := New()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := e.Eval(tt.expr, tt.vars)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if result != tt.wantTrue {
+				t.Errorf("Eval(%q) = %v, want %v (precision test)", tt.expr, result, tt.wantTrue)
+			}
+		})
 	}
 }
 
