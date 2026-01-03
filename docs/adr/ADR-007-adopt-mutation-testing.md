@@ -1,7 +1,7 @@
 # ADR-007: Adopt Gremlins for Mutation Testing
 
 ## Status
-Proposed
+Accepted
 
 ## Context and Problem Statement
 
