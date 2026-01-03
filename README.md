@@ -192,6 +192,9 @@ checks:
       - pattern_string
       # Multiple patterns can be specified as a list
 
+    # Optional: Read output from file instead of command stdout
+    file: path/to/output.txt
+
     # Optional: Assert extracted data meets conditions
     assert: "condition"      # e.g., "coverage >= 80" or "result == 'ok'"
 
@@ -219,6 +222,7 @@ checks:
 | `id` | Yes (per check) | string | Unique check identifier | — |
 | `run` | Yes (per check) | string | Shell command with optional `{{.var}}` interpolation | — |
 | `grok` | No | array[string] | Grok patterns to extract data from command output | — |
+| `file` | No | string | File path to read output from instead of command stdout | — |
 | `assert` | No | string | Assertion expression (requires `grok` patterns) | — |
 | `severity` | No | string | `error` or `warning` | `error` |
 | `suggestion` | No | string | Help text shown when check fails | — |
@@ -251,6 +255,23 @@ checks:
     assert: "coverage >= 80"
     suggestion: "Coverage is below 80%. Run 'go test ./...' with coverage analysis."
 ```
+
+### Reading Output from Files
+
+The `file` field allows reading check output from a file instead of command stdout. This is useful when tools write results to files (e.g., coverage reports, test result files) rather than printing to stdout:
+
+```yaml
+checks:
+  - id: coverage
+    run: go test ./... -coverprofile=coverage.out
+    file: coverage.out
+    grok:
+      - total:.*\(statements\)\s+%{NUMBER:coverage}%
+    assert: "coverage >= 80"
+    suggestion: "Coverage is {{.coverage}}%, target is 80%. Add more tests."
+```
+
+When `file` is specified, VibeGuard reads the file contents and applies grok patterns and assertions to that content instead of the command's stdout. The command still runs normally—the `file` field simply changes where the output is read from.
 
 ### Check Dependencies
 
