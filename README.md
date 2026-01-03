@@ -255,25 +255,33 @@ VibeGuard supports multiple implementation patterns:
 
 ```
 vibeguard/
+├── bin/                        # Compiled binary output
 ├── cmd/
 │   └── vibeguard/              # Main CLI application
 ├── internal/
+│   ├── assert/                 # Assertion expression parsing and evaluation
 │   ├── cli/                    # Command-line interface (Cobra-based)
-│   │   └── inspector/          # AI-assisted setup (project analysis, recommendations)
 │   ├── config/                 # Configuration loading and validation
-│   ├── judge/                  # Judge API integration
-│   ├── policy/                 # Policy evaluation engine
-│   ├── runner/                 # Runner implementations
+│   ├── executor/               # Check execution engine
+│   ├── grok/                   # Grok pattern extraction and matching
+│   ├── orchestrator/           # Check orchestration and dependency management
 │   ├── output/                 # Output formatting (text, JSON)
-│   └── assert/                 # Assertion expression parsing and evaluation
+│   └── version/                # Version information and constants
 ├── docs/
 │   ├── adr/                    # Architecture Decision Records
 │   ├── log/                    # Work logs and findings
-│   └── patterns/               # Implementation patterns (future)
+│   └── sample-prompts/         # Sample prompts for AI-assisted setup
 ├── examples/                   # Example configurations
+├── spikes/                     # Research and prototyping work
+│   ├── config/                 # Configuration exploration
+│   ├── executor/               # Executor prototype experiments
+│   ├── opa/                    # OpenPolicyAgent integration exploration
+│   └── orchestrator/           # Orchestration pattern research
 ├── README.md                   # This file
 ├── CONVENTIONS.md              # Code style and development standards
 ├── CLAUDE.md                   # Claude Code agent documentation
+├── SECURITY.md                 # Security model and responsible disclosure
+├── CHANGELOG.md                # Version history and changes
 └── vibeguard.yaml              # Default configuration file
 ```
 
@@ -321,6 +329,10 @@ Major architectural decisions are documented as Architecture Decision Records (A
 - **ADR-001** — Adopt Beads for AI Agent Task Management
 - **ADR-002** — Adopt Conventional Commits
 - **ADR-003** — Adopt Go as the Primary Implementation Language
+- **ADR-004** — Establish Code Quality Standards and Tooling
+- **ADR-005** — Adopt VibeGuard for Policy Enforcement in CI/CD
+- **ADR-006** — Integrate VibeGuard as Git Pre-Commit Hook for Policy Enforcement
+- **ADR-007** — Adopt Gremlins for Mutation Testing
 
 Review these documents to understand the project's design rationale and constraints.
 
