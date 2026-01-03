@@ -256,6 +256,102 @@ checks:
     suggestion: "Coverage is below 80%. Run 'go test ./...' with coverage analysis."
 ```
 
+### Assertion Expression Operators
+
+The `assert` field supports a rich set of operators for flexible condition evaluation:
+
+#### Comparison Operators
+| Operator | Description | Example |
+|----------|-------------|---------|
+| `>=` | Greater than or equal | `coverage >= 80` |
+| `>` | Greater than | `score > 90` |
+| `<=` | Less than or equal | `latency <= 500` |
+| `<` | Less than | `errors < 5` |
+| `==` | Equal (numeric or string) | `status == "ok"` or `count == 42` |
+| `!=` | Not equal | `result != "fail"` |
+
+#### Logical Operators
+| Operator | Description | Example |
+|----------|-------------|---------|
+| `&&` | Logical AND | `coverage >= 80 && tests_passed == true` |
+| `\|\|` | Logical OR | `linting_ok == true \|\| warnings < 10` |
+| `!` | Logical NOT | `!failed` |
+
+#### Arithmetic Operators
+| Operator | Description | Example |
+|----------|-------------|---------|
+| `+` | Addition | `count + 5 >= 10` |
+| `-` | Subtraction | `total - errors > 50` |
+| `*` | Multiplication | `ratio * 100 >= 80` |
+| `/` | Division | `usage / 1024 < 100` |
+
+#### Literals and Values
+| Type | Syntax | Example |
+|------|--------|---------|
+| Numbers | Integer or float | `coverage >= 80` or `ratio > 0.95` |
+| Strings | Single or double quoted | `status == "ok"` or `result == 'pass'` |
+| Booleans | `true` or `false` | `tests_passed == true` |
+| Variables | Grok pattern names | `coverage`, `result`, `errors` |
+| Grouping | Parentheses | `(coverage >= 80) && (tests_passed == true)` |
+
+#### Examples
+
+```yaml
+checks:
+  # Numeric comparison
+  - id: coverage-threshold
+    run: go test ./... -coverprofile=cover.out && go tool cover -func=cover.out
+    grok:
+      - total:.*\(statements\)\s+%{NUMBER:coverage}%
+    assert: "coverage >= 80"
+
+  # String comparison
+  - id: lint-status
+    run: golangci-lint run
+    grok:
+      - 'status:\s+%{WORD:result}'
+    assert: "result == 'pass'"
+
+  # Logical AND
+  - id: quality-gates
+    run: ./run-checks.sh
+    grok:
+      - 'coverage:%{NUMBER:coverage}'
+      - 'tests:%{WORD:tests_status}'
+    assert: "coverage >= 75 && tests_status == 'pass'"
+
+  # Logical OR (fail-safe)
+  - id: either-metric
+    run: ./check-metrics.sh
+    grok:
+      - 'metric_a:%{NUMBER:a}'
+      - 'metric_b:%{NUMBER:b}'
+    assert: "a > 100 || b > 50"
+
+  # Logical NOT
+  - id: no-failures
+    run: ./test-runner.sh
+    grok:
+      - 'failures:%{NUMBER:failed}'
+    assert: "!(failed > 0)"
+
+  # Arithmetic operations
+  - id: normalized-score
+    run: ./calculate-score.sh
+    grok:
+      - 'points:%{NUMBER:points}'
+    assert: "(points * 100) / 50 >= 80"
+
+  # Complex expression
+  - id: multi-condition
+    run: ./full-check.sh
+    grok:
+      - 'coverage:%{NUMBER:coverage}'
+      - 'performance:%{NUMBER:perf}'
+      - 'security:%{WORD:sec_status}'
+    assert: "(coverage >= 80 && perf < 1000) || sec_status == 'pass'"
+```
+
 ### Reading Output from Files
 
 The `file` field allows reading check output from a file instead of command stdout. This is useful when tools write results to files (e.g., coverage reports, test result files) rather than printing to stdout:
