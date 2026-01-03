@@ -1003,6 +1003,186 @@ func BenchmarkDetector_DetectPrimary(b *testing.B) {
 	}
 }
 
+// Boundary condition tests for detector.go boundary mutations
+// These tests target specific boundary condition mutations found during mutation testing
+
+func TestDetector_DetectSortingBoundary(t *testing.T) {
+	// Test boundary condition at line 67 and 69 - sorting with single result
+	tmpDir := t.TempDir()
+	files := map[string]string{
+		"go.mod": "module test\n\ngo 1.21\n",
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(tmpDir, name), []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	detector := NewDetector(tmpDir)
+	results, err := detector.Detect()
+	if err != nil {
+		t.Fatalf("Detect() error = %v", err)
+	}
+
+	// Should have detected Go (single result)
+	if len(results) < 1 {
+		t.Errorf("Expected at least one detection result")
+	}
+	// Go should be first with confidence > 0
+	if results[0].Type != Go {
+		t.Errorf("Expected first result to be Go, got %v", results[0].Type)
+	}
+}
+
+func TestDetector_ConfidenceCappingBoundary(t *testing.T) {
+	// Test boundary condition at confidence > 1.0 (lines 130, 170, etc.)
+	// Create a project with multiple high-confidence indicators
+	tmpDir := t.TempDir()
+	files := map[string]string{
+		"go.mod":  "module test\n\ngo 1.21\n",
+		"go.sum":  "github.com/example/pkg v1.0.0 h1:...\n",
+		"main.go": "package main\n\nfunc main() {}\n",
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(tmpDir, name), []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	detector := NewDetector(tmpDir)
+	results, err := detector.Detect()
+	if err != nil {
+		t.Fatalf("Detect() error = %v", err)
+	}
+
+	// Find Go detection
+	var goResult *DetectionResult
+	for i := range results {
+		if results[i].Type == Go {
+			goResult = &results[i]
+			break
+		}
+	}
+
+	if goResult == nil {
+		t.Errorf("Expected Go detection, got none")
+	} else if goResult.Confidence > 1.0 {
+		t.Errorf("Confidence = %f, should be capped at 1.0", goResult.Confidence)
+	} else if goResult.Confidence <= 0.6 {
+		t.Errorf("Confidence = %f, expected > 0.6 with multiple indicators", goResult.Confidence)
+	}
+}
+
+func TestDetector_DepthBoundaryViaGoDetection(t *testing.T) {
+	// Test boundary conditions for depth calculation (lines 382, 386, 389, 393)
+	// These mutations are indirectly tested by detecting Go files at different depths
+	tmpDir := t.TempDir()
+
+	// Create nested directory structure deeper than maxDepth=3 used in detection
+	dirs := []string{
+		"cmd",
+		"internal",
+		"vendor/example.com/pkg",
+		"a/b/c/d/e",
+	}
+	for _, dir := range dirs {
+		if err := os.MkdirAll(filepath.Join(tmpDir, dir), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Create test files at different depths
+	// Only files within maxDepth=3 should be found
+	files := map[string]string{
+		"go.mod":              "module test\n",
+		"cmd/main.go":         "package main\n",
+		"internal/handler.go": "package internal\n",
+		// These should NOT be found (too deep or vendor dir)
+		"vendor/example.com/pkg/vendor_test.go": "package vendor\n",
+		"a/b/c/d/e/nested.go":                   "package nested\n",
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(tmpDir, name), []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	detector := NewDetector(tmpDir)
+	result, err := detector.detectGo()
+	if err != nil {
+		t.Fatalf("detectGo() error = %v", err)
+	}
+
+	// Go detection should find .go files within reasonable depth
+	// and have "*.go files" in indicators
+	found := false
+	for _, ind := range result.Indicators {
+		if ind == "*.go files" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("detectGo() should find *.go files with depth limiting, got indicators: %v", result.Indicators)
+	}
+}
+
+func TestDetector_MultipleDetectionsWithTies(t *testing.T) {
+	// Test boundary conditions in sorting when multiple results have same confidence
+	tmpDir := t.TempDir()
+
+	// Create indicators for multiple languages with similar confidence
+	files := map[string]string{
+		"go.mod":       "module test\n",
+		"package.json": `{"name": "test"}`,
+		"main.go":      "package main\n",
+		"index.js":     "module.exports = {};\n",
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(tmpDir, name), []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	detector := NewDetector(tmpDir)
+	results, err := detector.Detect()
+	if err != nil {
+		t.Fatalf("Detect() error = %v", err)
+	}
+
+	// Should have multiple detections
+	if len(results) < 2 {
+		t.Errorf("Expected multiple detections, got %d", len(results))
+	}
+
+	// Results should be sorted by confidence (descending)
+	for i := 0; i < len(results)-1; i++ {
+		if results[i].Confidence < results[i+1].Confidence {
+			t.Errorf("Results not sorted by confidence: %f > %f", results[i].Confidence, results[i+1].Confidence)
+		}
+	}
+}
+
+func TestDetector_NoResults(t *testing.T) {
+	// Test case where no project type indicators are found
+	tmpDir := t.TempDir()
+
+	// Empty directory
+	detector := NewDetector(tmpDir)
+	results, err := detector.Detect()
+	if err != nil {
+		t.Fatalf("Detect() error = %v", err)
+	}
+
+	// Should have Unknown type with 0 confidence
+	if len(results) == 0 {
+		t.Errorf("Expected at least Unknown detection result")
+	}
+	if results[0].Type != Unknown {
+		t.Errorf("Expected Unknown type, got %v", results[0].Type)
+	}
+}
+
 func BenchmarkToolScanner_ScanAll(b *testing.B) {
 	tmpDir := b.TempDir()
 

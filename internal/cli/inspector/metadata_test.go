@@ -1397,6 +1397,225 @@ func TestMetadataExtractor_isGoSourceDir(t *testing.T) {
 	}
 }
 
+// Boundary condition tests for regex matching edge cases.
+// These tests target the `len(matches) > 1` boundary conditions in metadata extraction.
+
+func TestMetadataExtractor_ExtractGoMetadata_NoModuleLine(t *testing.T) {
+	// Test case where go.mod has no module line at all (regex doesn't match)
+	tmpDir := t.TempDir()
+	goMod := `# No module line here
+go 1.21
+require (
+	github.com/spf13/cobra v1.8.0
+)
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte(goMod), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	extractor := NewMetadataExtractor(tmpDir)
+	metadata, err := extractor.Extract(Go)
+	if err != nil {
+		t.Fatalf("Extract() error = %v", err)
+	}
+
+	// Name should be empty since module line wasn't found
+	if metadata.Name != "" {
+		t.Errorf("Name = %q, want empty string", metadata.Name)
+	}
+}
+
+func TestMetadataExtractor_ExtractGoMetadata_NoGoVersionLine(t *testing.T) {
+	// Test case where go.mod has no go version line (boundary mutation target)
+	tmpDir := t.TempDir()
+	goMod := `module github.com/example/test
+
+require (
+	github.com/spf13/cobra v1.8.0
+)
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte(goMod), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	extractor := NewMetadataExtractor(tmpDir)
+	metadata, err := extractor.Extract(Go)
+	if err != nil {
+		t.Fatalf("Extract() error = %v", err)
+	}
+
+	// go_version should not be set
+	if v, ok := metadata.Extra["go_version"]; ok && v != "" {
+		t.Errorf("go_version = %q, want not set", v)
+	}
+}
+
+func TestMetadataExtractor_ExtractPythonMetadata_NoMatches(t *testing.T) {
+	// Test case where pyproject.toml has no matching fields
+	tmpDir := t.TempDir()
+	pyproject := `[tool.other]
+something = "else"
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "pyproject.toml"), []byte(pyproject), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	extractor := NewMetadataExtractor(tmpDir)
+	metadata, err := extractor.Extract(Python)
+	if err != nil {
+		t.Fatalf("Extract() error = %v", err)
+	}
+
+	// All fields should be empty
+	if metadata.Name != "" {
+		t.Errorf("Name = %q, want empty", metadata.Name)
+	}
+	if metadata.Version != "" {
+		t.Errorf("Version = %q, want empty", metadata.Version)
+	}
+}
+
+func TestMetadataExtractor_ExtractRustMetadata_NoMatches(t *testing.T) {
+	// Test case where Cargo.toml has no matching fields (boundary mutation target)
+	tmpDir := t.TempDir()
+	cargoToml := `[dependencies]
+serde = "1.0"
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "Cargo.toml"), []byte(cargoToml), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	extractor := NewMetadataExtractor(tmpDir)
+	metadata, err := extractor.Extract(Rust)
+	if err != nil {
+		t.Fatalf("Extract() error = %v", err)
+	}
+
+	// Fields should be empty
+	if metadata.Name != "" {
+		t.Errorf("Name = %q, want empty", metadata.Name)
+	}
+	if metadata.Version != "" {
+		t.Errorf("Version = %q, want empty", metadata.Version)
+	}
+}
+
+func TestMetadataExtractor_ExtractRubyMetadata_NoMatches(t *testing.T) {
+	// Test case where gemspec has no matching fields
+	tmpDir := t.TempDir()
+	gemspec := `Gem::Specification.new do |s|
+  s.authors = ["Ruby Dev"]
+  s.license = "MIT"
+end
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "test.gemspec"), []byte(gemspec), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	extractor := NewMetadataExtractor(tmpDir)
+	metadata, err := extractor.Extract(Ruby)
+	if err != nil {
+		t.Fatalf("Extract() error = %v", err)
+	}
+
+	// Name and version should be empty (regex didn't match)
+	if metadata.Name != "" {
+		t.Errorf("Name = %q, want empty", metadata.Name)
+	}
+	if metadata.Version != "" {
+		t.Errorf("Version = %q, want empty", metadata.Version)
+	}
+}
+
+func TestMetadataExtractor_ExtractJavaMetadata_NoMatches(t *testing.T) {
+	// Test case where pom.xml has no matching fields
+	tmpDir := t.TempDir()
+	pomXml := `<?xml version="1.0" encoding="UTF-8"?>
+<project>
+    <modelVersion>4.0.0</modelVersion>
+</project>
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "pom.xml"), []byte(pomXml), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	extractor := NewMetadataExtractor(tmpDir)
+	metadata, err := extractor.Extract(Java)
+	if err != nil {
+		t.Fatalf("Extract() error = %v", err)
+	}
+
+	// Fields should be empty (regex didn't match)
+	if metadata.Name != "" {
+		t.Errorf("Name = %q, want empty", metadata.Name)
+	}
+	if metadata.Version != "" {
+		t.Errorf("Version = %q, want empty", metadata.Version)
+	}
+}
+
+func TestMetadataExtractor_ExtractStructure_SingleTestDir(t *testing.T) {
+	// Test boundary condition where there's exactly one test directory (boundary at len > 1)
+	tmpDir := t.TempDir()
+
+	dirs := []string{"cmd/app"}
+	for _, dir := range dirs {
+		if err := os.MkdirAll(filepath.Join(tmpDir, dir), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	files := map[string]string{
+		"go.mod":               "module example.com/test\n\ngo 1.21\n",
+		"cmd/app/main_test.go": "package main\n\nimport \"testing\"\n\nfunc TestMain(t *testing.T) {}\n",
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(tmpDir, name), []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	extractor := NewMetadataExtractor(tmpDir)
+	structure, err := extractor.ExtractStructure(Go)
+	if err != nil {
+		t.Fatalf("ExtractStructure() error = %v", err)
+	}
+
+	// Should find exactly one test directory
+	if len(structure.TestDirs) != 1 {
+		t.Errorf("TestDirs length = %d, want 1", len(structure.TestDirs))
+	}
+	if !sliceContains(structure.TestDirs, "cmd/app") {
+		t.Errorf("TestDirs should contain 'cmd/app', got %v", structure.TestDirs)
+	}
+}
+
+func TestMetadataExtractor_ExtractNodeMetadata_AuthorOnlyName(t *testing.T) {
+	// Test boundary condition where author object has no email field
+	tmpDir := t.TempDir()
+	packageJSON := `{
+		"name": "test-pkg",
+		"version": "1.0.0",
+		"author": {
+			"name": "Jane Doe"
+		}
+	}`
+	if err := os.WriteFile(filepath.Join(tmpDir, "package.json"), []byte(packageJSON), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	extractor := NewMetadataExtractor(tmpDir)
+	metadata, err := extractor.Extract(Node)
+	if err != nil {
+		t.Fatalf("Extract() error = %v", err)
+	}
+
+	// Should have author name but no email appended
+	if metadata.Author != "Jane Doe" {
+		t.Errorf("Author = %q, want %q", metadata.Author, "Jane Doe")
+	}
+}
+
 // sliceContains checks if a string slice contains a value.
 func sliceContains(slice []string, value string) bool {
 	for _, v := range slice {
