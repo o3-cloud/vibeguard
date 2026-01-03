@@ -324,6 +324,10 @@ Major architectural decisions are documented as Architecture Decision Records (A
 
 Review these documents to understand the project's design rationale and constraints.
 
+## Security
+
+For security information, including our security model, threat boundaries, and responsible disclosure process, see [SECURITY.md](SECURITY.md).
+
 ## Contributing
 
 Contributions are welcome! Please:

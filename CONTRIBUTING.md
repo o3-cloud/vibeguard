@@ -196,6 +196,7 @@ Major architectural decisions are documented in `docs/adr/` using the MADR forma
 - ADR-004 — Code Quality Standards and Tooling
 - ADR-005 — Adopt VibeGuard for Policy Enforcement
 - ADR-006 — Integrate VibeGuard as Git Pre-Commit Hook
+- ADR-007 — Adopt Gremlins for Mutation Testing
 
 When making architectural changes, consider creating a new ADR to document your decision.
 
