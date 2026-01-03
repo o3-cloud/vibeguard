@@ -29,6 +29,9 @@ Core principles:
   - Tools are Commands: Any CLI tool integrates via shell commands
   - Simple by Default: Exit code pass/fail requires minimal config
   - Actionable Output: Every violation answers "What failed?" and "What should I do?"`,
+	// SilenceUsage prevents showing help text when commands return errors.
+	// Usage should only be shown for invalid arguments/flags, not execution errors.
+	SilenceUsage: true,
 }
 
 // Execute runs the root command
