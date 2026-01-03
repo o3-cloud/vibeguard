@@ -14,6 +14,7 @@ checks:
     run: test -z "$(gofmt -l .)"
     severity: error
     suggestion: "Run 'gofmt -w .' to format your code"
+    fix: "gofmt -w ."
     timeout: 5s
 
   # Vet check
@@ -21,6 +22,7 @@ checks:
     run: go vet {{.go_packages}}
     severity: error
     suggestion: "Run 'go vet ./...' and fix reported issues"
+    fix: "go vet {{.go_packages}}"
     timeout: 10s
 
   # Lint check (requires golangci-lint installed)
@@ -28,6 +30,7 @@ checks:
     run: golangci-lint run {{.go_packages}}
     severity: warning
     suggestion: "Install golangci-lint: https://golangci-lint.run/usage/install/"
+    fix: "golangci-lint run {{.go_packages}} --fix"
     timeout: 30s
 
   # Unit tests
@@ -35,6 +38,7 @@ checks:
     run: go test {{.go_packages}}
     severity: error
     suggestion: "Run 'go test ./...' to diagnose test failures"
+    fix: "go test {{.go_packages}} -v"
     timeout: 60s
     requires:
       - fmt
@@ -46,7 +50,8 @@ checks:
       - total:.*\(statements\)\s+%{NUMBER:coverage}%
     assert: "coverage >= {{.min_coverage}}"
     severity: warning
-    suggestion: "Code coverage is below {{.min_coverage}}%. Increase test coverage."
+    suggestion: "Code coverage is {{.coverage}}%, need {{.min_coverage}}%. Add more tests."
+    fix: "go test {{.go_packages}} -coverprofile=cover.out && go tool cover -html=cover.out"
     timeout: 60s
     requires:
       - test
@@ -56,6 +61,7 @@ checks:
     run: go build {{.go_packages}}
     severity: error
     suggestion: "Run 'go build ./...' to diagnose build errors"
+    fix: "go build {{.go_packages}}"
     timeout: 30s
     requires:
       - vet

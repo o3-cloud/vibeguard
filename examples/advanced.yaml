@@ -1,0 +1,193 @@
+# Advanced Example: LLM Integration and Complex Patterns
+# This example demonstrates advanced VibeGuard features including:
+# - LLM-as-judge checks using Claude, Gemini, or Ollama
+# - Complex grok patterns with multiple extractions
+# - Dependency chains for efficient execution ordering
+# - Templated suggestions with extracted values
+
+version: "1"
+
+vars:
+  go_packages: "./..."
+  min_coverage: "80"
+  max_complexity: "15"
+
+checks:
+  # ============================================
+  # PHASE 1: Fast Deterministic Checks
+  # ============================================
+
+  # Format check
+  - id: fmt
+    run: test -z "$(gofmt -l .)"
+    severity: error
+    suggestion: "Code is not properly formatted"
+    fix: "gofmt -w ."
+    timeout: 5s
+
+  # Static analysis
+  - id: vet
+    run: go vet {{.go_packages}}
+    severity: error
+    suggestion: "go vet found issues in the codebase"
+    fix: "go vet {{.go_packages}}"
+    timeout: 10s
+
+  # Linting with golangci-lint
+  - id: lint
+    run: golangci-lint run {{.go_packages}}
+    severity: warning
+    suggestion: "Linting issues found. Run golangci-lint for details."
+    fix: "golangci-lint run {{.go_packages}} --fix"
+    timeout: 30s
+
+  # ============================================
+  # PHASE 2: Testing and Metrics
+  # ============================================
+
+  # Unit tests - depends on formatting being correct
+  - id: test
+    run: go test {{.go_packages}} -v
+    severity: error
+    suggestion: "Some tests are failing"
+    fix: "go test {{.go_packages}} -v"
+    timeout: 60s
+    requires:
+      - fmt
+
+  # Coverage validation with grok extraction
+  - id: coverage
+    run: go test {{.go_packages}} -coverprofile=cover.out && go tool cover -func=cover.out
+    grok:
+      - total:.*\(statements\)\s+%{NUMBER:coverage}%
+    assert: "coverage >= {{.min_coverage}}"
+    severity: warning
+    suggestion: "Coverage is {{.coverage}}%, need {{.min_coverage}}%. Add more test cases."
+    fix: "go test {{.go_packages}} -coverprofile=cover.out && go tool cover -html=cover.out"
+    timeout: 60s
+    requires:
+      - test
+
+  # Cyclomatic complexity check (requires gocyclo: go install github.com/fzipp/gocyclo/cmd/gocyclo@latest)
+  - id: complexity
+    run: gocyclo -top 5 -over {{.max_complexity}} .
+    grok:
+      - '%{INT:score} %{WORD:func} %{GREEDYDATA:location}'
+    assert: "score <= {{.max_complexity}}"
+    severity: warning
+    suggestion: "Function {{.func}} at {{.location}} has complexity {{.score}} (max: {{.max_complexity}})"
+    fix: "gocyclo -top 10 ."
+    timeout: 15s
+
+  # Build verification - depends on vet passing
+  - id: build
+    run: go build {{.go_packages}}
+    severity: error
+    suggestion: "Build failed with compilation errors"
+    fix: "go build {{.go_packages}}"
+    timeout: 30s
+    requires:
+      - vet
+
+  # ============================================
+  # PHASE 3: LLM-Powered Checks (Slower)
+  # These run after deterministic checks pass
+  # ============================================
+
+  # Architecture review using Claude CLI
+  # Requires: claude CLI (claude.ai/download)
+  - id: llm-architecture-review
+    run: |
+      claude -p "Review this Go code diff for architectural issues.
+      Focus on: separation of concerns, dependency management, interface design.
+      Output ONLY one line in this exact format:
+      VERDICT: PASS or FAIL | REASON: <brief explanation>
+
+      $(git diff HEAD~1 --name-only -- '*.go' | head -5 | xargs cat 2>/dev/null || echo 'No Go files changed')"
+    grok:
+      - 'VERDICT: %{WORD:verdict} \| REASON: %{GREEDYDATA:reason}'
+    assert: 'verdict == "PASS"'
+    severity: warning
+    suggestion: "{{.reason}}"
+    fix: "Review the architectural concerns and refactor as needed"
+    timeout: 60s
+    requires:
+      - fmt
+      - vet
+      - lint
+      - test
+
+  # Security review using Claude CLI
+  - id: llm-security-review
+    run: |
+      claude -p "Security audit of this Go code.
+      Check for: SQL injection, command injection, path traversal, hardcoded secrets.
+      Output ONLY one line: VERDICT: PASS or FAIL | REASON: <brief explanation>
+
+      $(git diff HEAD~1 -- '*.go' | head -100 || echo 'No changes')"
+    grok:
+      - 'VERDICT: %{WORD:verdict} \| REASON: %{GREEDYDATA:reason}'
+    assert: 'verdict == "PASS"'
+    severity: error
+    suggestion: "Security issue: {{.reason}}"
+    fix: "Address the security concern identified"
+    timeout: 60s
+    requires:
+      - build
+
+  # PR description quality check (useful in CI)
+  # Requires: gh CLI (cli.github.com)
+  - id: llm-pr-quality
+    run: |
+      PR_BODY=$(gh pr view --json body -q .body 2>/dev/null || echo "No PR context")
+      claude -p "Rate this PR description for clarity and completeness.
+      Score 1-10 where 7+ is acceptable.
+      Output ONLY: SCORE: <number> | FEEDBACK: <brief feedback>
+
+      PR Description:
+      $PR_BODY"
+    grok:
+      - 'SCORE: %{INT:score} \| FEEDBACK: %{GREEDYDATA:feedback}'
+    assert: "score >= 7"
+    severity: warning
+    suggestion: "PR description needs improvement (score: {{.score}}/10): {{.feedback}}"
+    fix: "Update the PR description with more context"
+    timeout: 60s
+    requires:
+      - test
+
+  # ============================================
+  # ALTERNATIVE: Local LLM with Ollama
+  # Uncomment to use instead of Claude
+  # ============================================
+
+  # - id: llm-review-ollama
+  #   run: |
+  #     ollama run codellama "Review this code for issues.
+  #     Output: VERDICT: PASS or FAIL | REASON: <why>
+  #     $(git diff HEAD~1 -- '*.go' | head -50)"
+  #   grok:
+  #     - 'VERDICT: %{WORD:verdict} \| REASON: %{GREEDYDATA:reason}'
+  #   assert: 'verdict == "PASS"'
+  #   severity: warning
+  #   suggestion: "{{.reason}}"
+  #   timeout: 120s
+  #   requires:
+  #     - test
+
+  # ============================================
+  # ALTERNATIVE: Gemini CLI
+  # ============================================
+
+  # - id: llm-review-gemini
+  #   run: |
+  #     gemini -p "Review this code. Output: VERDICT: PASS/FAIL | REASON: <why>
+  #     $(git diff HEAD~1 -- '*.go' | head -50)"
+  #   grok:
+  #     - 'VERDICT: %{WORD:verdict} \| REASON: %{GREEDYDATA:reason}'
+  #   assert: 'verdict == "PASS"'
+  #   severity: warning
+  #   suggestion: "{{.reason}}"
+  #   timeout: 60s
+  #   requires:
+  #     - test

@@ -14,6 +14,7 @@ checks:
     run: npx prettier --check .
     severity: error
     suggestion: "Run 'npx prettier --write .' to format your code"
+    fix: "npx prettier --write ."
     timeout: 30s
 
   # Lint check using ESLint
@@ -21,6 +22,7 @@ checks:
     run: npx eslint {{.source_dir}} --max-warnings 0
     severity: error
     suggestion: "Run 'npx eslint {{.source_dir}} --fix' to fix linting issues"
+    fix: "npx eslint {{.source_dir}} --fix"
     timeout: 30s
 
   # Type check using TypeScript (if applicable)
@@ -28,6 +30,7 @@ checks:
     run: npx tsc --noEmit
     severity: warning
     suggestion: "Run 'npx tsc --noEmit' to check for TypeScript errors"
+    fix: "npx tsc --noEmit"
     timeout: 30s
 
   # Unit tests
@@ -35,6 +38,7 @@ checks:
     run: npm test -- --coverage --passWithNoTests
     severity: error
     suggestion: "Run 'npm test' to diagnose test failures"
+    fix: "npm test -- --verbose"
     timeout: 60s
     requires:
       - lint
@@ -46,7 +50,8 @@ checks:
       - total.*coveredPercent[^:]*:\s*%{NUMBER:coverage}
     assert: "coverage >= {{.min_coverage}}"
     severity: warning
-    suggestion: "Code coverage is below {{.min_coverage}}%. Increase test coverage."
+    suggestion: "Code coverage is {{.coverage}}%, need {{.min_coverage}}%. Add more tests."
+    fix: "npm test -- --coverage"
     timeout: 60s
     requires:
       - test
@@ -56,6 +61,7 @@ checks:
     run: npm run build
     severity: error
     suggestion: "Run 'npm run build' to diagnose build errors"
+    fix: "npm run build"
     timeout: 60s
     requires:
       - typecheck

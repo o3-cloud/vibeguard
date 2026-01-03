@@ -10,6 +10,7 @@ checks:
     run: test -z "$(gofmt -l .)"
     severity: error
     suggestion: "Run 'gofmt -w .' to format your code"
+    fix: "gofmt -w ."
     timeout: 5s
 
   # Vet check: Run go vet for code analysis
@@ -17,6 +18,7 @@ checks:
     run: go vet ./...
     severity: error
     suggestion: "Run 'go vet ./...' and fix reported issues"
+    fix: "go vet ./..."
     timeout: 10s
 
   # Test check: Ensure tests pass
@@ -24,4 +26,5 @@ checks:
     run: go test ./...
     severity: error
     suggestion: "Run 'go test ./...' to diagnose test failures"
+    fix: "go test ./... -v"
     timeout: 30s
