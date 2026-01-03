@@ -16,7 +16,27 @@ type Matcher struct {
 }
 
 // New creates a new Matcher with the given patterns.
-// Each pattern is compiled eagerly to detect errors early.
+//
+// Pattern Compilation:
+//   - Each pattern is compiled immediately to detect syntax errors early.
+//   - This "fail-fast" approach catches invalid patterns during matcher creation rather than during matching.
+//   - If any pattern fails to compile, creation returns an error without creating the matcher.
+//
+// Pattern Syntax:
+//   - Supports grok built-in patterns: %{PATTERN_NAME:capture_name}
+//   - Supports custom regex with named captures: (?P<capture_name>regex)
+//   - Can mix both syntaxes in the same pattern string
+//   - Special regex characters must be properly escaped
+//
+// Error Messages:
+//   - If a pattern fails to compile, the error message includes the invalid pattern string.
+//   - This helps users identify exactly which pattern has a syntax error.
+//
+// Examples:
+//   - Valid: "%{NUMBER:count} tests"
+//   - Valid: "coverage:\s+%{NUMBER:coverage}%"
+//   - Valid: "(?P<status>\w+) test"
+//   - Invalid: "%{NONEXISTENT_PATTERN:val}" (unknown pattern name)
 func New(patterns []string) (*Matcher, error) {
 	if len(patterns) == 0 {
 		return &Matcher{
@@ -41,9 +61,30 @@ func New(patterns []string) (*Matcher, error) {
 }
 
 // Match applies grok patterns to the input and returns extracted values.
-// If multiple patterns are provided, all are applied and their results merged.
-// Later patterns can override values from earlier patterns.
-// Unmatched pattern variables are set to empty strings.
+//
+// Pattern Matching Behavior:
+//   - All patterns are applied sequentially and independently to the input.
+//   - If multiple patterns capture the same field name, the later pattern's value overrides earlier ones.
+//   - If a pattern doesn't match, its fields are simply not included in the result (no error).
+//   - Unmatched patterns do not generate errors; only pattern compilation or parsing errors do.
+//
+// Error Handling:
+//   - Returns an error if any pattern fails to parse the input.
+//   - The error message includes the pattern index (0-based), the pattern string, and the first 100
+//     characters of the input (truncated for readability).
+//   - This helps users identify which pattern failed and debug pattern syntax issues.
+//
+// Pattern Syntax Support:
+//   - Built-in patterns: %{NUMBER:name}, %{INT:name}, %{WORD:name}, %{IP:name}, %{IPV6:name}, %{UUID:name}, etc.
+//   - Custom regex: (?P<name>pattern) for named capture groups
+//   - Mixed patterns: Combine built-in and custom patterns in the same string
+//   - Special characters must be escaped: use \( for literal parentheses, \[ for brackets, etc.
+//
+// Examples:
+//   - Simple: "%{NUMBER:coverage}%"
+//   - With context: "coverage: %{NUMBER:coverage}%"
+//   - Custom regex: "(?P<count>[0-9]+) tests?"
+//   - Mixed: "total:.*\(statements\)\s+%{NUMBER:coverage}%"
 func (m *Matcher) Match(input string) (map[string]string, error) {
 	result := make(map[string]string)
 
@@ -63,6 +104,7 @@ func (m *Matcher) Match(input string) (map[string]string, error) {
 			return nil, fmt.Errorf("grok pattern %d failed to parse\n  pattern: %q\n  output: %q\n  error: %w", i, pattern, output, err)
 		}
 		// Merge extracted values into result
+		// Later patterns can override values from earlier patterns
 		for k, v := range values {
 			result[k] = v
 		}

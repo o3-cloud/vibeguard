@@ -369,6 +369,163 @@ checks:
 
 When `file` is specified, VibeGuard reads the file contents and applies grok patterns and assertions to that content instead of the command's stdout. The command still runs normally—the `file` field simply changes where the output is read from.
 
+### Grok Pattern Debugging Guide
+
+When a grok pattern fails to match, VibeGuard provides detailed error messages to help you debug. Understanding these messages and common pattern syntax is essential for effective pattern configuration.
+
+#### Error Format and Interpretation
+
+When a grok pattern fails to parse output, you'll see an error like:
+
+```
+grok pattern 0 failed to parse
+  pattern: 'coverage: %{NUMBER:coverage}%'
+  output: 'Total coverage: 85.5%'
+  error: <underlying grok error>
+```
+
+The error includes:
+- **pattern index** (0, 1, 2, etc.) - Which pattern in your `grok` list failed
+- **pattern string** - The exact pattern that failed
+- **output** - The first 100 characters of the text being matched (truncated for readability)
+- **error** - The underlying grok compilation or matching error
+
+#### Common Pattern Syntax
+
+Grok supports built-in patterns for common data types. Here are the most frequently used:
+
+| Pattern | Matches | Example |
+|---------|---------|---------|
+| `%{NUMBER:name}` | Integer or decimal numbers | `42`, `3.14`, `85.5` |
+| `%{INT:name}` | Integers only | `42`, `100`, `-5` |
+| `%{WORD:name}` | Single words (letters, digits, underscore) | `PASS`, `coverage`, `test_1` |
+| `%{IP:name}` | IPv4 addresses | `192.168.1.1`, `10.0.0.1` |
+| `%{IPV6:name}` | IPv6 addresses | `::1`, `2001:db8::1` |
+| `%{UUID:name}` | UUID format | `550e8400-e29b-41d4-a716-446655440000` |
+| `%{GREEDYDATA:name}` | Any characters (greedy) | Useful for capturing everything to end of line |
+| `%{DATA:name}` | Non-greedy data capture | Stops at first match of following pattern |
+
+#### Mixing Built-in and Custom Patterns
+
+You can mix grok built-in patterns with custom regex:
+
+```yaml
+checks:
+  - id: test-results
+    run: ./run-tests.sh
+    grok:
+      # Built-in pattern
+      - '%{NUMBER:tests} tests'
+      # Custom regex with named capture group
+      - 'passed: (?P<passed>[0-9]+)'
+      # Mix both styles (grok built-in + literal text)
+      - 'Failures: %{NUMBER:failures}'
+```
+
+#### Pattern Matching Behavior
+
+- **Patterns are applied sequentially** - If you specify multiple patterns, each is applied to the output independently
+- **Later patterns override earlier values** - If two patterns capture the same field name, the later pattern's value wins
+- **Non-matches return empty fields** - If a pattern doesn't match, the fields it would capture simply won't be present (don't generate errors)
+- **All patterns can be optional** - You can have patterns that may or may not match; only those that match contribute extracted values
+
+#### Common Debugging Strategies
+
+**1. Test patterns incrementally**
+
+Start with simple patterns and add complexity:
+
+```yaml
+grok:
+  # Start here - does this basic pattern work?
+  - '%{NUMBER:coverage}'
+  # Then add context
+  - 'coverage: %{NUMBER:coverage}%'
+  # Then handle variations
+  - 'Total coverage: %{NUMBER:coverage}%'
+```
+
+**2. Account for special characters**
+
+Special regex characters need escaping:
+
+```yaml
+grok:
+  # Literal parentheses must be escaped
+  - 'total:.*\(statements\)\s+%{NUMBER:coverage}%'
+
+  # Literal brackets
+  - '\[%{WORD:level}\]\s+%{GREEDYDATA:message}'
+```
+
+**3. Use capturing groups for flexible matching**
+
+When built-in patterns don't fit, use regex:
+
+```yaml
+grok:
+  # Capture test count from various formats
+  - '(?P<tests>[0-9]+) tests?'  # matches "1 test" or "42 tests"
+
+  # Capture version numbers
+  - 'version[: ]+(?P<version>[0-9.]+)'
+
+  # Capture quoted strings
+  - 'error: "(?P<message>[^"]+)"'
+```
+
+**4. Handle whitespace variations**
+
+Use `\s+` for flexible whitespace:
+
+```yaml
+grok:
+  # Matches "coverage:85.5%" or "coverage: 85.5 %"
+  - 'coverage\s*:\s*%{NUMBER:coverage}\s*%'
+```
+
+#### Pattern Examples by Use Case
+
+**Coverage Extraction**
+```yaml
+grok:
+  - 'coverage: %{NUMBER:coverage}%'
+  - 'total:.*\(statements\)\s+%{NUMBER:coverage}%'  # Go test format
+  - '%{NUMBER:coverage}%\s+coverage'  # Alternative order
+```
+
+**Test Count Extraction**
+```yaml
+grok:
+  - '%{NUMBER:tests} tests?'
+  - 'ran\s+%{NUMBER:tests}\s+tests?'
+  - '(?P<passed>[0-9]+)/(?P<tests>[0-9]+) passed'
+```
+
+**Status/Result Extraction**
+```yaml
+grok:
+  - 'status:\s+%{WORD:status}'
+  - '%{WORD:result}\s+(PASS|FAIL|OK)'
+  - 'result[: =]+(?P<result>\w+)'
+```
+
+**Error/Warning Counts**
+```yaml
+grok:
+  - '%{NUMBER:errors} errors?'
+  - 'errors:\s*%{INT:errors}\s*warnings:\s*%{INT:warnings}'
+  - 'failed:\s+%{NUMBER:failures}'
+```
+
+**Duration/Performance**
+```yaml
+grok:
+  - 'took %{NUMBER:duration}s'
+  - 'completed in %{NUMBER:duration}ms'
+  - 'latency:\s*%{NUMBER:latency}(ms|s)'
+```
+
 ### Check Dependencies
 
 Specify that a check requires other checks to pass first:
