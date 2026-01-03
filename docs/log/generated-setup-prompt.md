@@ -23,10 +23,11 @@ generate a valid configuration.
 
 ### Project Structure:
 - Source directories: internal
+- Test directories: internal/assert, internal/cli, internal/cli/assist, internal/cli/inspector, internal/cli/templates, internal/config, internal/executor, internal/grok, internal/orchestrator, internal/output
 - Entry points: cmd/vibeguard/main.go
 
 ### Build System:
-- Build output: default
+- Build output: bin
 
 
 ---
@@ -121,12 +122,26 @@ Based on the detected tools, here are the recommended checks:
 **Severity:** error
 **Suggestion on failure:** Run 'gofmt -w .' to format your Go code.
 
+### imports (format)
+**Description:** Check import organization with goimports
+**Rationale:** goimports ensures consistent import grouping and removes unused imports
+**Command:** `test -z "$(goimports -l .)"`
+**Severity:** error
+**Suggestion on failure:** Run 'goimports -w .' to fix import organization.
+
 ### vet (lint)
 **Description:** Run go vet to detect suspicious constructs
 **Rationale:** go vet finds bugs that the compiler doesn't catch, like incorrect printf format strings
 **Command:** `go vet ./...`
 **Severity:** error
 **Suggestion on failure:** Fix the issues reported by go vet. These are often real bugs.
+
+### lint (lint)
+**Description:** Run golangci-lint to check for code quality issues
+**Rationale:** golangci-lint aggregates multiple Go linters and provides comprehensive code analysis
+**Command:** `golangci-lint run ./...`
+**Severity:** error
+**Suggestion on failure:** Fix the linting issues reported above. Run 'golangci-lint run --fix' to auto-fix some issues.
 
 ### test (test)
 **Description:** Run Go tests
