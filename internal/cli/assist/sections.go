@@ -482,7 +482,21 @@ checks:
   # ... your checks ...
 `+"```"+`
 
-After generating the configuration, verify it would pass the validation rules listed above.`, projectName),
+After generating the configuration:
+
+1. **Validate the YAML syntax and schema:**
+   `+"```bash"+`
+   vibeguard validate
+   `+"```"+`
+   This verifies the configuration file has correct YAML syntax and adheres to the vibeguard schema.
+
+2. **Run the checks to verify they execute properly:**
+   `+"```bash"+`
+   vibeguard check
+   `+"```"+`
+   This runs all defined checks and ensures they execute successfully. Fix any failing checks before considering the task complete.
+
+Only consider this task complete when both commands pass without errors.`, projectName),
 	}
 }
 

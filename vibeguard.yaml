@@ -18,23 +18,23 @@ checks:
 
   - id: lint
     run: golangci-lint run {{.go_packages}}
-    severity: warning
-    suggestion: "Install golangci-lint and run 'golangci-lint run' to fix reported issues"
+    severity: error
+    suggestion: golangci-lint found lint issues, run 'golangci-lint run ./...' to fix lint issues
     timeout: 5s
 
   - id: test
     run: go test {{.go_packages}}
     severity: warning
     suggestion: "Run 'go test ./...' to ensure all tests pass"
-    timeout: 5s
+    timeout: 10s
 
   - id: test-coverage
-    run: go test ./... -coverprofile cover.out & go tool cover -func cover.out
+    run: go test ./... -coverprofile cover.out && go tool cover -func cover.out
     grok:
       - total:.*\(statements\)\s+%{NUMBER:coverage}%
     assert: "coverage >= 80"
     suggestion: "Coverage is below 80%"
-    timeout: 5s
+    timeout: 10s
 
   - id: build
     run: go build {{.go_packages}}

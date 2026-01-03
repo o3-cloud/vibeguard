@@ -31,6 +31,78 @@ generate a valid configuration.
 
 ---
 
+## Tooling Inspection Instructions
+
+Before generating the configuration, **inspect the existing tool configurations** in this project to understand how they're set up:
+
+### What to Look For
+
+When inspecting each configuration file:
+
+1. **Enabled rules/checks**: What specific rules or checks are enabled?
+2. **Disabled rules**: Are any rules explicitly disabled? (They may conflict with project needs)
+3. **Custom settings**: Are there custom paths, thresholds, or exclusions?
+4. **Integration points**: Does the tool integrate with other tools (e.g., editor configs, CI)?
+5. **Command variations**: Are there specific flags or options being used?
+
+Use this understanding to craft VibeGuard checks that:
+- Run tools with the same flags/options as configured
+- Respect existing exclusions and thresholds
+- Maintain consistency with the project's existing standards
+
+
+---
+
+## Additional Tooling Research
+
+Based on the project type, consider recommending additional quality and security tools that aren't currently configured.
+
+### Suggested Tools to Consider
+
+#### staticcheck
+**Category:** Linter
+**Purpose:** Advanced static analysis for Go beyond go vet
+**Value:** Catches bugs, suggests simplifications, and identifies deprecated code
+**Example command:** `staticcheck ./...`
+
+#### gosec
+**Category:** Security
+**Purpose:** Security-focused static analysis for Go code
+**Value:** Identifies potential security issues like SQL injection, hardcoded credentials
+**Example command:** `gosec ./...`
+
+#### errcheck
+**Category:** Linter
+**Purpose:** Checks for unchecked errors in Go code
+**Value:** Ensures error handling is not accidentally ignored
+**Example command:** `errcheck ./...`
+
+#### ineffassign
+**Category:** Linter
+**Purpose:** Detects ineffectual assignments in Go code
+**Value:** Finds variables assigned but never used
+**Example command:** `ineffassign ./...`
+
+#### govulncheck
+**Category:** Security
+**Purpose:** Checks Go dependencies for known vulnerabilities
+**Value:** Official Go team tool for CVE scanning in dependencies
+**Example command:** `govulncheck ./...`
+
+### How to Present Suggestions
+
+When suggesting additional tools to the user:
+
+1. **Explain the benefit**: Why would this tool help the project?
+2. **Assess compatibility**: Will it work well with existing tools?
+3. **Provide options**: Let the user decide which suggestions to include
+4. **Include installation notes**: If a tool requires installation, mention it in the suggestion field
+
+Ask the user: "Would you like me to include checks for any of these additional tools?"
+
+
+---
+
 ## Recommended Checks
 
 Based on the detected tools, here are the recommended checks:
@@ -485,4 +557,18 @@ checks:
   # ... your checks ...
 ```
 
-After generating the configuration, verify it would pass the validation rules listed above.
+After generating the configuration:
+
+1. **Validate the YAML syntax and schema:**
+   ```bash
+   vibeguard validate
+   ```
+   This verifies the configuration file has correct YAML syntax and adheres to the vibeguard schema.
+
+2. **Run the checks to verify they execute properly:**
+   ```bash
+   vibeguard check
+   ```
+   This runs all defined checks and ensures they execute successfully. Fix any failing checks before considering the task complete.
+
+Only consider this task complete when both commands pass without errors.

@@ -252,7 +252,7 @@ func runAssist(cmd *cobra.Command, args []string) error {
 			}
 		}
 		absPath, _ := filepath.Abs(initOutput)
-		fmt.Fprintf(cmd.ErrOrStderr(), "Setup prompt written to: %s\n", absPath)
+		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Setup prompt written to: %s\n", absPath)
 	} else {
 		// Write to stdout
 		fmt.Print(prompt)

@@ -77,7 +77,7 @@ func TestRunAssist_UndetectableProject(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	oldAssist := initAssist
 	oldOutput := initOutput
@@ -119,8 +119,8 @@ func TestRunAssist_OutputToFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp file: %v", err)
 	}
-	tmpFile.Close()
-	defer os.Remove(tmpFile.Name())
+	_ = tmpFile.Close()
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	oldAssist := initAssist
 	oldOutput := initOutput
@@ -173,8 +173,8 @@ func TestRunAssist_NotADirectory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp file: %v", err)
 	}
-	tmpFile.Close()
-	defer os.Remove(tmpFile.Name())
+	_ = tmpFile.Close()
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	oldAssist := initAssist
 	oldOutput := initOutput
