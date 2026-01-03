@@ -3,6 +3,7 @@ package inspector
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -1178,6 +1179,221 @@ plugins {
 	}
 	if metadata.Extra["group"] != "com.example" {
 		t.Errorf("group = %q, want %q", metadata.Extra["group"], "com.example")
+	}
+}
+
+func TestMetadataExtractor_ExtractGoStructure_ColocatedTests(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a Go project with co-located tests (Go convention)
+	dirs := []string{
+		"cmd/myapp",
+		"internal/handler",
+		"internal/service",
+		"pkg/utils",
+	}
+	for _, dir := range dirs {
+		if err := os.MkdirAll(filepath.Join(tmpDir, dir), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Create source files and co-located test files
+	files := map[string]string{
+		"go.mod":                           "module example.com/test\n\ngo 1.21\n",
+		"cmd/myapp/main.go":                "package main\n\nfunc main() {}\n",
+		"internal/handler/handler.go":      "package handler\n\nfunc Handle() {}\n",
+		"internal/handler/handler_test.go": "package handler\n\nimport \"testing\"\n\nfunc TestHandle(t *testing.T) {}\n",
+		"internal/service/service.go":      "package service\n\nfunc Serve() {}\n",
+		"internal/service/service_test.go": "package service\n\nimport \"testing\"\n\nfunc TestServe(t *testing.T) {}\n",
+		"pkg/utils/utils.go":               "package utils\n\nfunc Helper() {}\n",
+		"pkg/utils/utils_test.go":          "package utils\n\nimport \"testing\"\n\nfunc TestHelper(t *testing.T) {}\n",
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(tmpDir, name), []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	extractor := NewMetadataExtractor(tmpDir)
+	structure, err := extractor.ExtractStructure(Go)
+	if err != nil {
+		t.Fatalf("ExtractStructure() error = %v", err)
+	}
+
+	// Should detect directories containing test files
+	expectedTestDirs := []string{
+		"internal/handler",
+		"internal/service",
+		"pkg/utils",
+	}
+	for _, dir := range expectedTestDirs {
+		if !sliceContains(structure.TestDirs, dir) {
+			t.Errorf("TestDirs should contain %q (co-located tests), got %v", dir, structure.TestDirs)
+		}
+	}
+}
+
+func TestMetadataExtractor_ExtractGoStructure_RootLevelTests(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a simple Go project with tests at root level
+	files := map[string]string{
+		"go.mod":       "module example.com/test\n\ngo 1.21\n",
+		"main.go":      "package main\n\nfunc main() {}\n",
+		"main_test.go": "package main\n\nimport \"testing\"\n\nfunc TestMain(t *testing.T) {}\n",
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(tmpDir, name), []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	extractor := NewMetadataExtractor(tmpDir)
+	structure, err := extractor.ExtractStructure(Go)
+	if err != nil {
+		t.Fatalf("ExtractStructure() error = %v", err)
+	}
+
+	// Should detect root directory contains tests
+	if !sliceContains(structure.TestDirs, ".") {
+		t.Errorf("TestDirs should contain '.' for root-level tests, got %v", structure.TestDirs)
+	}
+}
+
+func TestMetadataExtractor_ExtractGoStructure_ExcludesVendorAndTestdata(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create directories including vendor and testdata
+	dirs := []string{
+		"internal/handler",
+		"vendor/example.com/pkg",
+		"testdata",
+	}
+	for _, dir := range dirs {
+		if err := os.MkdirAll(filepath.Join(tmpDir, dir), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	files := map[string]string{
+		"go.mod":                           "module example.com/test\n\ngo 1.21\n",
+		"internal/handler/handler.go":      "package handler\n\nfunc Handle() {}\n",
+		"internal/handler/handler_test.go": "package handler\n\nimport \"testing\"\n\nfunc TestHandle(t *testing.T) {}\n",
+		// These should be ignored
+		"vendor/example.com/pkg/pkg_test.go": "package pkg\n\nimport \"testing\"\n\nfunc TestPkg(t *testing.T) {}\n",
+		"testdata/fixture_test.go":           "package testdata\n\nimport \"testing\"\n\nfunc TestFixture(t *testing.T) {}\n",
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(tmpDir, name), []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	extractor := NewMetadataExtractor(tmpDir)
+	structure, err := extractor.ExtractStructure(Go)
+	if err != nil {
+		t.Fatalf("ExtractStructure() error = %v", err)
+	}
+
+	// Should include internal/handler
+	if !sliceContains(structure.TestDirs, "internal/handler") {
+		t.Errorf("TestDirs should contain 'internal/handler', got %v", structure.TestDirs)
+	}
+
+	// Should not include vendor directories
+	for _, dir := range structure.TestDirs {
+		if strings.Contains(dir, "vendor") {
+			t.Errorf("TestDirs should not contain vendor directories, but found %q", dir)
+		}
+	}
+
+	// testdata should be in TestDirs as a dedicated test directory (not from co-located detection)
+	// but should not have test files detected within it
+}
+
+func TestMetadataExtractor_findGoTestDirs(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create various directories
+	dirs := []string{
+		"cmd/app",
+		"pkg/lib",
+		"internal/core",
+		"api/v1",
+		"random/nested",
+	}
+	for _, dir := range dirs {
+		if err := os.MkdirAll(filepath.Join(tmpDir, dir), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Create test files in some directories
+	testFiles := []string{
+		"cmd/app/main_test.go",
+		"pkg/lib/lib_test.go",
+		"internal/core/core_test.go",
+		"api/v1/api_test.go",
+		"random/nested/nested_test.go", // Should NOT be included - not a source dir
+	}
+	for _, file := range testFiles {
+		path := filepath.Join(tmpDir, file)
+		content := "package test\n\nimport \"testing\"\n\nfunc TestSomething(t *testing.T) {}\n"
+		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	extractor := NewMetadataExtractor(tmpDir)
+	testDirs := extractor.findGoTestDirs()
+
+	// Should include source directories with tests
+	expectedDirs := []string{"cmd/app", "pkg/lib", "internal/core", "api/v1"}
+	for _, expected := range expectedDirs {
+		if !sliceContains(testDirs, expected) {
+			t.Errorf("findGoTestDirs() should include %q, got %v", expected, testDirs)
+		}
+	}
+
+	// Should NOT include random/nested (not a standard Go source directory)
+	if sliceContains(testDirs, "random/nested") {
+		t.Errorf("findGoTestDirs() should not include 'random/nested', got %v", testDirs)
+	}
+}
+
+func TestMetadataExtractor_isGoSourceDir(t *testing.T) {
+	extractor := NewMetadataExtractor(".")
+
+	tests := []struct {
+		path     string
+		expected bool
+	}{
+		{".", true},
+		{"cmd", true},
+		{"cmd/myapp", true},
+		{"pkg", true},
+		{"pkg/utils", true},
+		{"internal", true},
+		{"internal/handler", true},
+		{"lib", true},
+		{"api", true},
+		{"api/v1", true},
+		{"app", true},
+		{"app/handlers", true},
+		{"random", false},
+		{"docs", false},
+		{"scripts", false},
+		{"vendor", false}, // vendor is skipped at walk level, but also not a source dir
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			result := extractor.isGoSourceDir(tt.path)
+			if result != tt.expected {
+				t.Errorf("isGoSourceDir(%q) = %v, want %v", tt.path, result, tt.expected)
+			}
+		})
 	}
 }
 

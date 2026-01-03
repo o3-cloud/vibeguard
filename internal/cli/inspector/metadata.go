@@ -627,9 +627,18 @@ func (m *MetadataExtractor) extractGoStructure(s *ProjectStructure) {
 		}
 	}
 
-	// Test directories
+	// Test directories - first check for dedicated test directories
 	for _, dir := range []string{"test", "tests", "testdata"} {
 		if m.dirExists(dir) {
+			s.TestDirs = append(s.TestDirs, dir)
+		}
+	}
+
+	// Go convention: tests are co-located with source files (*_test.go)
+	// Find directories containing test files in source directories
+	testDirs := m.findGoTestDirs()
+	for _, dir := range testDirs {
+		if !contains(s.TestDirs, dir) {
 			s.TestDirs = append(s.TestDirs, dir)
 		}
 	}
@@ -641,6 +650,91 @@ func (m *MetadataExtractor) extractGoStructure(s *ProjectStructure) {
 			break
 		}
 	}
+}
+
+// findGoTestDirs finds directories containing Go test files (*_test.go).
+// It walks through the project looking for test files and returns unique
+// directory paths relative to the project root. Only returns directories
+// that are commonly considered source directories (pkg, internal, cmd, or root).
+func (m *MetadataExtractor) findGoTestDirs() []string {
+	testDirs := make(map[string]bool)
+
+	// Walk from root to find *_test.go files
+	_ = filepath.Walk(m.root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil // Skip directories we can't read
+		}
+
+		// Skip hidden directories and common non-source directories
+		name := info.Name()
+		if info.IsDir() {
+			// Don't skip the root directory itself (path == m.root handles both "." and absolute paths)
+			if path != m.root && (strings.HasPrefix(name, ".") || name == "vendor" || name == "node_modules" || name == "testdata") {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		// Check for *_test.go files
+		if strings.HasSuffix(name, "_test.go") {
+			// Get directory relative to root
+			dir := filepath.Dir(path)
+			relDir, err := filepath.Rel(m.root, dir)
+			if err != nil {
+				return nil
+			}
+
+			// Normalize root directory
+			if relDir == "." {
+				relDir = "."
+			}
+
+			// Only include directories that are source directories or their subdirectories
+			// This filters out test fixtures and similar directories
+			if m.isGoSourceDir(relDir) {
+				testDirs[relDir] = true
+			}
+		}
+		return nil
+	})
+
+	// Convert map to sorted slice
+	var result []string
+	for dir := range testDirs {
+		result = append(result, dir)
+	}
+
+	// Sort for consistent output
+	if len(result) > 1 {
+		// Simple sort by path
+		for i := 0; i < len(result)-1; i++ {
+			for j := i + 1; j < len(result); j++ {
+				if result[i] > result[j] {
+					result[i], result[j] = result[j], result[i]
+				}
+			}
+		}
+	}
+
+	return result
+}
+
+// isGoSourceDir checks if a directory path is considered a Go source directory.
+// This includes: root (.), cmd/*, pkg/*, internal/*, and their subdirectories.
+func (m *MetadataExtractor) isGoSourceDir(relPath string) bool {
+	if relPath == "." {
+		return true
+	}
+
+	// Common Go source directory prefixes
+	sourcePrefixes := []string{"cmd", "pkg", "internal", "lib", "api", "app"}
+	for _, prefix := range sourcePrefixes {
+		if relPath == prefix || strings.HasPrefix(relPath, prefix+string(filepath.Separator)) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // extractNodeStructure extracts Node.js project structure.
