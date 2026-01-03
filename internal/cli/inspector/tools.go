@@ -124,6 +124,14 @@ func (s *ToolScanner) scanGoTools() ([]ToolInfo, error) {
 		golangciLint.Confidence = 0.9
 		golangciLint.Indicators = []string{configPath}
 	}
+	// Check Makefile and CI configs even if config file not found
+	if !golangciLint.Detected {
+		if confidence, indicators := s.enhanceToolDetection("golangci-lint"); confidence > 0 {
+			golangciLint.Detected = true
+			golangciLint.Confidence = confidence
+			golangciLint.Indicators = indicators
+		}
+	}
 	tools = append(tools, golangciLint)
 
 	// gofmt (always available with Go)
@@ -167,11 +175,11 @@ func (s *ToolScanner) scanGoTools() ([]ToolInfo, error) {
 		Name:     "goimports",
 		Category: CategoryFormatter,
 	}
-	// Check if goimports is mentioned in Makefile or scripts
-	if s.fileContains("Makefile", "goimports") || s.fileContains("go.mod", "goimports") {
+	// Check Makefile, CI configs, and scripts for goimports
+	if confidence, indicators := s.enhanceToolDetection("goimports"); confidence > 0 {
 		goimports.Detected = true
-		goimports.Confidence = 0.7
-		goimports.Indicators = []string{"goimports mentioned in Makefile or go.mod"}
+		goimports.Confidence = confidence
+		goimports.Indicators = indicators
 	}
 	tools = append(tools, goimports)
 
@@ -200,6 +208,14 @@ func (s *ToolScanner) scanNodeTools() ([]ToolInfo, error) {
 		eslint.Confidence = 0.8
 		eslint.Indicators = []string{"eslint in package.json"}
 	}
+	// Check Makefile and CI configs if not already detected
+	if !eslint.Detected {
+		if confidence, indicators := s.enhanceToolDetection("eslint"); confidence > 0 {
+			eslint.Detected = true
+			eslint.Confidence = confidence
+			eslint.Indicators = indicators
+		}
+	}
 	tools = append(tools, eslint)
 
 	// Prettier
@@ -216,6 +232,14 @@ func (s *ToolScanner) scanNodeTools() ([]ToolInfo, error) {
 		prettier.Detected = true
 		prettier.Confidence = 0.8
 		prettier.Indicators = []string{"prettier in package.json"}
+	}
+	// Check Makefile and CI configs if not already detected
+	if !prettier.Detected {
+		if confidence, indicators := s.enhanceToolDetection("prettier"); confidence > 0 {
+			prettier.Detected = true
+			prettier.Confidence = confidence
+			prettier.Indicators = indicators
+		}
 	}
 	tools = append(tools, prettier)
 
@@ -234,6 +258,14 @@ func (s *ToolScanner) scanNodeTools() ([]ToolInfo, error) {
 		jest.Confidence = 0.8
 		jest.Indicators = []string{"jest in package.json"}
 	}
+	// Check Makefile and CI configs if not already detected
+	if !jest.Detected {
+		if confidence, indicators := s.enhanceToolDetection("jest"); confidence > 0 {
+			jest.Detected = true
+			jest.Confidence = confidence
+			jest.Indicators = indicators
+		}
+	}
 	tools = append(tools, jest)
 
 	// Mocha
@@ -250,6 +282,14 @@ func (s *ToolScanner) scanNodeTools() ([]ToolInfo, error) {
 		mocha.Detected = true
 		mocha.Confidence = 0.8
 		mocha.Indicators = []string{"mocha in package.json"}
+	}
+	// Check Makefile and CI configs if not already detected
+	if !mocha.Detected {
+		if confidence, indicators := s.enhanceToolDetection("mocha"); confidence > 0 {
+			mocha.Detected = true
+			mocha.Confidence = confidence
+			mocha.Indicators = indicators
+		}
 	}
 	tools = append(tools, mocha)
 
@@ -268,6 +308,14 @@ func (s *ToolScanner) scanNodeTools() ([]ToolInfo, error) {
 		vitest.Confidence = 0.8
 		vitest.Indicators = []string{"vitest in package.json"}
 	}
+	// Check Makefile and CI configs if not already detected
+	if !vitest.Detected {
+		if confidence, indicators := s.enhanceToolDetection("vitest"); confidence > 0 {
+			vitest.Detected = true
+			vitest.Confidence = confidence
+			vitest.Indicators = indicators
+		}
+	}
 	tools = append(tools, vitest)
 
 	// TypeScript
@@ -284,6 +332,14 @@ func (s *ToolScanner) scanNodeTools() ([]ToolInfo, error) {
 		typescript.Detected = true
 		typescript.Confidence = 0.8
 		typescript.Indicators = []string{"typescript in package.json"}
+	}
+	// Check Makefile and CI configs if not already detected (look for tsc)
+	if !typescript.Detected {
+		if confidence, indicators := s.enhanceToolDetection("tsc"); confidence > 0 {
+			typescript.Detected = true
+			typescript.Confidence = confidence
+			typescript.Indicators = indicators
+		}
 	}
 	tools = append(tools, typescript)
 
@@ -334,6 +390,14 @@ func (s *ToolScanner) scanPythonTools() ([]ToolInfo, error) {
 		black.Confidence = 0.7
 		black.Indicators = []string{"black in requirements"}
 	}
+	// Check Makefile and CI configs if not already detected
+	if !black.Detected {
+		if confidence, indicators := s.enhanceToolDetection("black"); confidence > 0 {
+			black.Detected = true
+			black.Confidence = confidence
+			black.Indicators = indicators
+		}
+	}
 	tools = append(tools, black)
 
 	// Pylint
@@ -355,6 +419,14 @@ func (s *ToolScanner) scanPythonTools() ([]ToolInfo, error) {
 		pylint.Detected = true
 		pylint.Confidence = 0.7
 		pylint.Indicators = []string{"pylint in requirements"}
+	}
+	// Check Makefile and CI configs if not already detected
+	if !pylint.Detected {
+		if confidence, indicators := s.enhanceToolDetection("pylint"); confidence > 0 {
+			pylint.Detected = true
+			pylint.Confidence = confidence
+			pylint.Indicators = indicators
+		}
 	}
 	tools = append(tools, pylint)
 
@@ -389,6 +461,14 @@ func (s *ToolScanner) scanPythonTools() ([]ToolInfo, error) {
 		pytest.Confidence = 0.7
 		pytest.Indicators = []string{"pytest in requirements"}
 	}
+	// Check Makefile and CI configs if not already detected
+	if !pytest.Detected {
+		if confidence, indicators := s.enhanceToolDetection("pytest"); confidence > 0 {
+			pytest.Detected = true
+			pytest.Confidence = confidence
+			pytest.Indicators = indicators
+		}
+	}
 	tools = append(tools, pytest)
 
 	// Mypy
@@ -411,6 +491,14 @@ func (s *ToolScanner) scanPythonTools() ([]ToolInfo, error) {
 		mypy.Confidence = 0.7
 		mypy.Indicators = []string{"mypy in requirements"}
 	}
+	// Check Makefile and CI configs if not already detected
+	if !mypy.Detected {
+		if confidence, indicators := s.enhanceToolDetection("mypy"); confidence > 0 {
+			mypy.Detected = true
+			mypy.Confidence = confidence
+			mypy.Indicators = indicators
+		}
+	}
 	tools = append(tools, mypy)
 
 	// Ruff (modern Python linter)
@@ -429,6 +517,14 @@ func (s *ToolScanner) scanPythonTools() ([]ToolInfo, error) {
 		ruff.Confidence = 0.9
 		ruff.Indicators = []string{"[tool.ruff] in pyproject.toml"}
 	}
+	// Check Makefile and CI configs if not already detected
+	if !ruff.Detected {
+		if confidence, indicators := s.enhanceToolDetection("ruff"); confidence > 0 {
+			ruff.Detected = true
+			ruff.Confidence = confidence
+			ruff.Indicators = indicators
+		}
+	}
 	tools = append(tools, ruff)
 
 	// Flake8
@@ -446,6 +542,14 @@ func (s *ToolScanner) scanPythonTools() ([]ToolInfo, error) {
 		flake8.ConfigFile = "setup.cfg"
 		flake8.Confidence = 0.9
 		flake8.Indicators = []string{"[flake8] in setup.cfg"}
+	}
+	// Check Makefile and CI configs if not already detected
+	if !flake8.Detected {
+		if confidence, indicators := s.enhanceToolDetection("flake8"); confidence > 0 {
+			flake8.Detected = true
+			flake8.Confidence = confidence
+			flake8.Indicators = indicators
+		}
 	}
 	tools = append(tools, flake8)
 
@@ -473,6 +577,14 @@ func (s *ToolScanner) scanPythonTools() ([]ToolInfo, error) {
 		isort.Detected = true
 		isort.Confidence = 0.7
 		isort.Indicators = []string{"isort in requirements"}
+	}
+	// Check Makefile and CI configs if not already detected
+	if !isort.Detected {
+		if confidence, indicators := s.enhanceToolDetection("isort"); confidence > 0 {
+			isort.Detected = true
+			isort.Confidence = confidence
+			isort.Indicators = indicators
+		}
 	}
 	tools = append(tools, isort)
 
@@ -764,4 +876,149 @@ func (s *ToolScanner) fileContains(name, substr string) bool {
 		return false
 	}
 	return strings.Contains(string(data), substr)
+}
+
+// scanMakefileForTool checks if a tool is referenced in Makefile.
+func (s *ToolScanner) scanMakefileForTool(toolName string) (bool, string) {
+	makefiles := []string{"Makefile", "makefile", "GNUmakefile"}
+	for _, makefile := range makefiles {
+		if s.fileContains(makefile, toolName) {
+			return true, makefile
+		}
+	}
+	return false, ""
+}
+
+// scanCIWorkflowsForTool checks if a tool is referenced in CI workflow files.
+func (s *ToolScanner) scanCIWorkflowsForTool(toolName string) (bool, []string) {
+	var indicators []string
+
+	// GitHub Actions workflows
+	workflowFiles, _ := filepath.Glob(filepath.Join(s.root, ".github/workflows/*.yml"))
+	yamlFiles, _ := filepath.Glob(filepath.Join(s.root, ".github/workflows/*.yaml"))
+	workflowFiles = append(workflowFiles, yamlFiles...)
+
+	for _, wf := range workflowFiles {
+		data, err := os.ReadFile(wf)
+		if err != nil {
+			continue
+		}
+		if strings.Contains(string(data), toolName) {
+			relPath, _ := filepath.Rel(s.root, wf)
+			indicators = append(indicators, relPath)
+		}
+	}
+
+	// GitLab CI
+	if s.fileContains(".gitlab-ci.yml", toolName) {
+		indicators = append(indicators, ".gitlab-ci.yml")
+	}
+
+	// CircleCI
+	circleConfigs := []string{".circleci/config.yml", ".circleci/config.yaml"}
+	for _, config := range circleConfigs {
+		if s.fileContains(config, toolName) {
+			indicators = append(indicators, config)
+		}
+	}
+
+	// Travis CI
+	if s.fileContains(".travis.yml", toolName) {
+		indicators = append(indicators, ".travis.yml")
+	}
+
+	// Jenkinsfile
+	jenkinsFiles := []string{"Jenkinsfile", "jenkins/Jenkinsfile"}
+	for _, jf := range jenkinsFiles {
+		if s.fileContains(jf, toolName) {
+			indicators = append(indicators, jf)
+		}
+	}
+
+	return len(indicators) > 0, indicators
+}
+
+// scanScriptsForTool checks if a tool is referenced in scripts directory.
+func (s *ToolScanner) scanScriptsForTool(toolName string) (bool, []string) {
+	var indicators []string
+
+	scriptDirs := []string{"scripts", "script", "bin", "tools"}
+	scriptExtensions := []string{".sh", ".bash", ".zsh", ""}
+
+	for _, dir := range scriptDirs {
+		dirPath := filepath.Join(s.root, dir)
+		if info, err := os.Stat(dirPath); err != nil || !info.IsDir() {
+			continue
+		}
+
+		entries, err := os.ReadDir(dirPath)
+		if err != nil {
+			continue
+		}
+
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+
+			name := entry.Name()
+			isScript := false
+			for _, ext := range scriptExtensions {
+				if ext == "" {
+					// Check if file is executable (no extension)
+					if !strings.Contains(name, ".") {
+						isScript = true
+						break
+					}
+				} else if strings.HasSuffix(name, ext) {
+					isScript = true
+					break
+				}
+			}
+
+			if isScript {
+				scriptPath := filepath.Join(dir, name)
+				if s.fileContains(scriptPath, toolName) {
+					indicators = append(indicators, scriptPath)
+				}
+			}
+		}
+	}
+
+	return len(indicators) > 0, indicators
+}
+
+// enhanceToolDetection checks Makefile, CI configs, and scripts for tool references.
+// It returns additional confidence and indicators if found.
+func (s *ToolScanner) enhanceToolDetection(toolName string) (float64, []string) {
+	var indicators []string
+	confidence := 0.0
+
+	// Check Makefile
+	if found, makefile := s.scanMakefileForTool(toolName); found {
+		indicators = append(indicators, toolName+" in "+makefile)
+		confidence = 0.7 // Makefile reference is a good signal
+	}
+
+	// Check CI workflows
+	if found, ciIndicators := s.scanCIWorkflowsForTool(toolName); found {
+		for _, ind := range ciIndicators {
+			indicators = append(indicators, toolName+" in "+ind)
+		}
+		if confidence < 0.75 {
+			confidence = 0.75 // CI config is a strong signal
+		}
+	}
+
+	// Check scripts directory
+	if found, scriptIndicators := s.scanScriptsForTool(toolName); found {
+		for _, ind := range scriptIndicators {
+			indicators = append(indicators, toolName+" in "+ind)
+		}
+		if confidence < 0.65 {
+			confidence = 0.65 // Script reference is a moderate signal
+		}
+	}
+
+	return confidence, indicators
 }

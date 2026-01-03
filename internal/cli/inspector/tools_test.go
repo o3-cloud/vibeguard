@@ -2069,3 +2069,579 @@ pip-audit==2.6.0
 		}
 	}
 }
+
+// Tests for enhanced tool detection from Makefile, CI configs, and scripts
+
+func TestToolScanner_GolangciLintFromMakefile(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Write go.mod (required for Go project detection)
+	if err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module test\n\ngo 1.21\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write Makefile with golangci-lint (NO config file)
+	makefile := `lint:
+	golangci-lint run ./...
+
+test:
+	go test ./...
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "Makefile"), []byte(makefile), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	tools, err := scanner.scanGoTools()
+	if err != nil {
+		t.Fatalf("scanGoTools failed: %v", err)
+	}
+
+	var golangciLint *ToolInfo
+	for i := range tools {
+		if tools[i].Name == "golangci-lint" {
+			golangciLint = &tools[i]
+			break
+		}
+	}
+
+	if golangciLint == nil || !golangciLint.Detected {
+		t.Error("golangci-lint should be detected from Makefile")
+	} else {
+		if golangciLint.Confidence < 0.6 || golangciLint.Confidence > 0.8 {
+			t.Errorf("golangci-lint confidence should be ~0.7 when from Makefile, got %f", golangciLint.Confidence)
+		}
+		if len(golangciLint.Indicators) == 0 {
+			t.Error("golangci-lint should have indicators")
+		}
+	}
+}
+
+func TestToolScanner_GolangciLintFromCIWorkflow(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Write go.mod
+	if err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module test\n\ngo 1.21\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create GitHub Actions workflow with golangci-lint
+	workflowDir := filepath.Join(tmpDir, ".github", "workflows")
+	if err := os.MkdirAll(workflowDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	workflow := `name: CI
+on: push
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: golangci/golangci-lint-action@v3
+        with:
+          version: latest
+`
+	if err := os.WriteFile(filepath.Join(workflowDir, "ci.yml"), []byte(workflow), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	tools, err := scanner.scanGoTools()
+	if err != nil {
+		t.Fatalf("scanGoTools failed: %v", err)
+	}
+
+	var golangciLint *ToolInfo
+	for i := range tools {
+		if tools[i].Name == "golangci-lint" {
+			golangciLint = &tools[i]
+			break
+		}
+	}
+
+	if golangciLint == nil || !golangciLint.Detected {
+		t.Error("golangci-lint should be detected from CI workflow")
+	} else {
+		if golangciLint.Confidence < 0.7 {
+			t.Errorf("golangci-lint confidence should be >= 0.7 when from CI workflow, got %f", golangciLint.Confidence)
+		}
+	}
+}
+
+func TestToolScanner_EslintFromMakefile(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Write package.json (minimal, no eslint devDep)
+	if err := os.WriteFile(filepath.Join(tmpDir, "package.json"), []byte(`{"name": "test"}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write Makefile with eslint
+	makefile := `lint:
+	npx eslint src/
+
+test:
+	npm test
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "Makefile"), []byte(makefile), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	tools, err := scanner.scanNodeTools()
+	if err != nil {
+		t.Fatalf("scanNodeTools failed: %v", err)
+	}
+
+	var eslint *ToolInfo
+	for i := range tools {
+		if tools[i].Name == "eslint" {
+			eslint = &tools[i]
+			break
+		}
+	}
+
+	if eslint == nil || !eslint.Detected {
+		t.Error("eslint should be detected from Makefile")
+	}
+}
+
+func TestToolScanner_PrettierFromGitLabCI(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Write package.json
+	if err := os.WriteFile(filepath.Join(tmpDir, "package.json"), []byte(`{"name": "test"}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write .gitlab-ci.yml with prettier
+	gitlabCI := `stages:
+  - lint
+
+prettier:
+  stage: lint
+  script:
+    - npx prettier --check .
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, ".gitlab-ci.yml"), []byte(gitlabCI), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	tools, err := scanner.scanNodeTools()
+	if err != nil {
+		t.Fatalf("scanNodeTools failed: %v", err)
+	}
+
+	var prettier *ToolInfo
+	for i := range tools {
+		if tools[i].Name == "prettier" {
+			prettier = &tools[i]
+			break
+		}
+	}
+
+	if prettier == nil || !prettier.Detected {
+		t.Error("prettier should be detected from .gitlab-ci.yml")
+	}
+}
+
+func TestToolScanner_PytestFromMakefile(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Write Makefile with pytest (no config file or requirements)
+	makefile := `test:
+	pytest tests/ -v
+
+lint:
+	flake8 src/
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "Makefile"), []byte(makefile), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	tools, err := scanner.scanPythonTools()
+	if err != nil {
+		t.Fatalf("scanPythonTools failed: %v", err)
+	}
+
+	var pytest *ToolInfo
+	var flake8 *ToolInfo
+	for i := range tools {
+		switch tools[i].Name {
+		case "pytest":
+			pytest = &tools[i]
+		case "flake8":
+			flake8 = &tools[i]
+		}
+	}
+
+	if pytest == nil || !pytest.Detected {
+		t.Error("pytest should be detected from Makefile")
+	}
+	if flake8 == nil || !flake8.Detected {
+		t.Error("flake8 should be detected from Makefile")
+	}
+}
+
+func TestToolScanner_ToolsFromScriptsDirectory(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create scripts directory with lint script
+	scriptsDir := filepath.Join(tmpDir, "scripts")
+	if err := os.MkdirAll(scriptsDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write shell script that runs golangci-lint
+	lintScript := `#!/bin/bash
+set -e
+
+echo "Running linters..."
+golangci-lint run ./...
+echo "Linting complete!"
+`
+	if err := os.WriteFile(filepath.Join(scriptsDir, "lint.sh"), []byte(lintScript), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write go.mod
+	if err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module test\n\ngo 1.21\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	tools, err := scanner.scanGoTools()
+	if err != nil {
+		t.Fatalf("scanGoTools failed: %v", err)
+	}
+
+	var golangciLint *ToolInfo
+	for i := range tools {
+		if tools[i].Name == "golangci-lint" {
+			golangciLint = &tools[i]
+			break
+		}
+	}
+
+	if golangciLint == nil || !golangciLint.Detected {
+		t.Error("golangci-lint should be detected from scripts directory")
+	}
+}
+
+func TestToolScanner_RuffFromTravisCI(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Write .travis.yml with ruff
+	travisCI := `language: python
+python:
+  - "3.11"
+install:
+  - pip install ruff
+script:
+  - ruff check .
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, ".travis.yml"), []byte(travisCI), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	tools, err := scanner.scanPythonTools()
+	if err != nil {
+		t.Fatalf("scanPythonTools failed: %v", err)
+	}
+
+	var ruff *ToolInfo
+	for i := range tools {
+		if tools[i].Name == "ruff" {
+			ruff = &tools[i]
+			break
+		}
+	}
+
+	if ruff == nil || !ruff.Detected {
+		t.Error("ruff should be detected from .travis.yml")
+	}
+}
+
+func TestToolScanner_TypescriptFromCircleCI(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Write package.json
+	if err := os.WriteFile(filepath.Join(tmpDir, "package.json"), []byte(`{"name": "test"}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create CircleCI config with tsc
+	circleDir := filepath.Join(tmpDir, ".circleci")
+	if err := os.MkdirAll(circleDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	circleConfig := `version: 2.1
+jobs:
+  build:
+    docker:
+      - image: node:18
+    steps:
+      - checkout
+      - run: npm ci
+      - run: npx tsc --noEmit
+`
+	if err := os.WriteFile(filepath.Join(circleDir, "config.yml"), []byte(circleConfig), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	tools, err := scanner.scanNodeTools()
+	if err != nil {
+		t.Fatalf("scanNodeTools failed: %v", err)
+	}
+
+	var typescript *ToolInfo
+	for i := range tools {
+		if tools[i].Name == "typescript" {
+			typescript = &tools[i]
+			break
+		}
+	}
+
+	if typescript == nil || !typescript.Detected {
+		t.Error("typescript should be detected from CircleCI config (tsc command)")
+	}
+}
+
+func TestToolScanner_MypyFromJenkinsfile(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Write Jenkinsfile with mypy
+	jenkinsfile := `pipeline {
+    agent any
+    stages {
+        stage('Lint') {
+            steps {
+                sh 'mypy src/'
+            }
+        }
+        stage('Test') {
+            steps {
+                sh 'pytest tests/'
+            }
+        }
+    }
+}
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "Jenkinsfile"), []byte(jenkinsfile), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	tools, err := scanner.scanPythonTools()
+	if err != nil {
+		t.Fatalf("scanPythonTools failed: %v", err)
+	}
+
+	var mypy *ToolInfo
+	var pytest *ToolInfo
+	for i := range tools {
+		switch tools[i].Name {
+		case "mypy":
+			mypy = &tools[i]
+		case "pytest":
+			pytest = &tools[i]
+		}
+	}
+
+	if mypy == nil || !mypy.Detected {
+		t.Error("mypy should be detected from Jenkinsfile")
+	}
+	if pytest == nil || !pytest.Detected {
+		t.Error("pytest should be detected from Jenkinsfile")
+	}
+}
+
+func TestToolScanner_EnhanceToolDetection_MultipleIndicators(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Write go.mod
+	if err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module test\n\ngo 1.21\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write Makefile with golangci-lint
+	if err := os.WriteFile(filepath.Join(tmpDir, "Makefile"), []byte("lint:\n\tgolangci-lint run\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create CI workflow with golangci-lint
+	workflowDir := filepath.Join(tmpDir, ".github", "workflows")
+	if err := os.MkdirAll(workflowDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workflowDir, "ci.yml"), []byte("name: CI\njobs:\n  lint:\n    steps:\n      - run: golangci-lint run\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	tools, err := scanner.scanGoTools()
+	if err != nil {
+		t.Fatalf("scanGoTools failed: %v", err)
+	}
+
+	var golangciLint *ToolInfo
+	for i := range tools {
+		if tools[i].Name == "golangci-lint" {
+			golangciLint = &tools[i]
+			break
+		}
+	}
+
+	if golangciLint == nil || !golangciLint.Detected {
+		t.Error("golangci-lint should be detected")
+	} else {
+		// Should have multiple indicators (from Makefile and CI)
+		if len(golangciLint.Indicators) < 2 {
+			t.Errorf("golangci-lint should have multiple indicators from different sources, got %d: %v",
+				len(golangciLint.Indicators), golangciLint.Indicators)
+		}
+	}
+}
+
+func TestToolScanner_ScanMakefileForTool(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Test with standard Makefile (most common)
+	if err := os.WriteFile(filepath.Join(tmpDir, "Makefile"), []byte("lint:\n\tgolangci-lint run\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	found, makefile := scanner.scanMakefileForTool("golangci-lint")
+
+	if !found {
+		t.Error("should find golangci-lint in Makefile")
+	}
+	if makefile != "Makefile" {
+		t.Errorf("should report Makefile name correctly, got %s", makefile)
+	}
+}
+
+func TestToolScanner_ScanMakefileForTool_GNUmakefile(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Test with GNUmakefile
+	if err := os.WriteFile(filepath.Join(tmpDir, "GNUmakefile"), []byte("test:\n\tpytest tests/\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	found, makefile := scanner.scanMakefileForTool("pytest")
+
+	if !found {
+		t.Error("should find pytest in GNUmakefile")
+	}
+	if makefile != "GNUmakefile" {
+		t.Errorf("should report GNUmakefile name correctly, got %s", makefile)
+	}
+}
+
+func TestToolScanner_ScanCIWorkflowsForTool_MultipleSources(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create GitHub workflow
+	workflowDir := filepath.Join(tmpDir, ".github", "workflows")
+	if err := os.MkdirAll(workflowDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workflowDir, "ci.yml"), []byte("jobs:\n  lint:\n    run: eslint\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create GitLab CI
+	if err := os.WriteFile(filepath.Join(tmpDir, ".gitlab-ci.yml"), []byte("lint:\n  script: eslint .\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	found, indicators := scanner.scanCIWorkflowsForTool("eslint")
+
+	if !found {
+		t.Error("should find eslint in CI workflows")
+	}
+	if len(indicators) < 2 {
+		t.Errorf("should find eslint in multiple CI configs, got %d: %v", len(indicators), indicators)
+	}
+}
+
+func TestToolScanner_BlackFromMakefileAndCI(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Write Makefile with black
+	makefile := `format:
+	black src/ tests/
+
+check-format:
+	black --check src/ tests/
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "Makefile"), []byte(makefile), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	tools, err := scanner.scanPythonTools()
+	if err != nil {
+		t.Fatalf("scanPythonTools failed: %v", err)
+	}
+
+	var black *ToolInfo
+	for i := range tools {
+		if tools[i].Name == "black" {
+			black = &tools[i]
+			break
+		}
+	}
+
+	if black == nil || !black.Detected {
+		t.Error("black should be detected from Makefile")
+	}
+}
+
+func TestToolScanner_JestFromMakefile(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Write package.json
+	if err := os.WriteFile(filepath.Join(tmpDir, "package.json"), []byte(`{"name": "test"}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write Makefile with jest
+	makefile := `test:
+	npx jest --coverage
+
+test-watch:
+	npx jest --watch
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "Makefile"), []byte(makefile), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	tools, err := scanner.scanNodeTools()
+	if err != nil {
+		t.Fatalf("scanNodeTools failed: %v", err)
+	}
+
+	var jest *ToolInfo
+	for i := range tools {
+		if tools[i].Name == "jest" {
+			jest = &tools[i]
+			break
+		}
+	}
+
+	if jest == nil || !jest.Detected {
+		t.Error("jest should be detected from Makefile")
+	}
+}
