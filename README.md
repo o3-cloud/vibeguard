@@ -106,6 +106,8 @@ vibeguard check --fail-fast  # Stop on first failure
 vibeguard check --json       # Output results in JSON format
 ```
 
+For JSON output format details, see [JSON Output Schema](docs/JSON-OUTPUT-SCHEMA.md).
+
 #### `vibeguard init [flags]`
 
 Create a starter configuration file in the current directory.
