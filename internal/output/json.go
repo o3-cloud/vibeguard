@@ -28,6 +28,7 @@ type JSONViolation struct {
 	Severity   string            `json:"severity"`
 	Command    string            `json:"command"`
 	Suggestion string            `json:"suggestion,omitempty"`
+	Fix        string            `json:"fix,omitempty"`
 	Extracted  map[string]string `json:"extracted,omitempty"`
 }
 
@@ -60,6 +61,7 @@ func FormatJSON(out io.Writer, result *orchestrator.RunResult) error {
 			Severity:   string(v.Severity),
 			Command:    v.Command,
 			Suggestion: v.Suggestion,
+			Fix:        v.Fix,
 			Extracted:  v.Extracted,
 		})
 	}

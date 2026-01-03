@@ -7,39 +7,45 @@ checks:
   - id: vet
     run: go vet {{.go_packages}}
     severity: error
-    suggestion: "Run 'go vet ./...' and fix reported issues"
+    suggestion: "go vet found issues in the codebase"
+    fix: "go vet ./..."
     timeout: 5s
 
   - id: fmt
     run: test -z "$(gofmt -l .)"
     severity: error
-    suggestion: "Run 'gofmt -w .' to format code"
+    suggestion: "Code is not properly formatted"
+    fix: "gofmt -w ."
     timeout: 5s
 
   - id: lint
     run: golangci-lint run {{.go_packages}}
     severity: error
-    suggestion: golangci-lint found lint issues, run 'golangci-lint run ./...' to fix lint issues
+    suggestion: "golangci-lint found lint issues"
+    fix: "golangci-lint run ./..."
     timeout: 5s
 
   - id: test
     run: go test {{.go_packages}}
     severity: warning
-    suggestion: "Run 'go test ./...' to ensure all tests pass"
+    suggestion: "Some tests are failing"
+    fix: "go test ./..."
     timeout: 10s
 
   - id: test-coverage
     run: go test ./... -coverprofile cover.out && go tool cover -func cover.out
     grok:
       - total:.*\(statements\)\s+%{NUMBER:coverage}%
-    assert: "coverage >= 80"
-    suggestion: "Coverage is below 80%"
+    assert: "coverage >= 89"
+    suggestion: "Coverage is {{.coverage}}%, need 89%"
+    fix: "Add more test cases to improve coverage"
     timeout: 10s
 
   - id: build
     run: go build {{.go_packages}}
     severity: error
-    suggestion: "Run 'go build ./...' and fix compilation errors"
+    suggestion: "Build failed with compilation errors"
+    fix: "go build ./..."
     timeout: 5s
     requires:
       - vet

@@ -195,3 +195,50 @@ func TestFormatJSON_CancelledStatus(t *testing.T) {
 		t.Errorf("expected exit code %d, got %d", executor.ExitCodeTimeout, output.ExitCode)
 	}
 }
+
+func TestFormatJSON_WithFixField(t *testing.T) {
+	var buf bytes.Buffer
+
+	result := &orchestrator.RunResult{
+		Results: []*orchestrator.CheckResult{
+			{
+				Check:     &config.Check{ID: "coverage", Severity: config.SeverityError},
+				Execution: &executor.Result{Duration: 900 * time.Millisecond},
+				Passed:    false,
+			},
+		},
+		Violations: []*orchestrator.Violation{
+			{
+				CheckID:    "coverage",
+				Severity:   config.SeverityError,
+				Command:    "go test -cover ./...",
+				Suggestion: "Coverage is 72%, need 80%.",
+				Fix:        "Add tests to improve coverage",
+				Extracted:  map[string]string{"coverage": "72"},
+			},
+		},
+		ExitCode: executor.ExitCodeViolation,
+	}
+
+	err := FormatJSON(&buf, result)
+	if err != nil {
+		t.Fatalf("FormatJSON failed: %v", err)
+	}
+
+	var output JSONOutput
+	if err := json.Unmarshal(buf.Bytes(), &output); err != nil {
+		t.Fatalf("failed to unmarshal output: %v", err)
+	}
+
+	if len(output.Violations) != 1 {
+		t.Fatalf("expected 1 violation, got %d", len(output.Violations))
+	}
+
+	v := output.Violations[0]
+	if v.Suggestion != "Coverage is 72%, need 80%." {
+		t.Errorf("expected suggestion 'Coverage is 72%%, need 80%%.', got %q", v.Suggestion)
+	}
+	if v.Fix != "Add tests to improve coverage" {
+		t.Errorf("expected fix 'Add tests to improve coverage', got %q", v.Fix)
+	}
+}

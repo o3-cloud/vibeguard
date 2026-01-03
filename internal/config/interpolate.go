@@ -12,6 +12,7 @@ func (c *Config) Interpolate() {
 		c.Checks[i].Run = c.interpolateString(c.Checks[i].Run)
 		c.Checks[i].Assert = c.interpolateString(c.Checks[i].Assert)
 		c.Checks[i].Suggestion = c.interpolateString(c.Checks[i].Suggestion)
+		c.Checks[i].Fix = c.interpolateString(c.Checks[i].Fix)
 		c.Checks[i].File = c.interpolateString(c.Checks[i].File)
 
 		for j := range c.Checks[i].Grok {

@@ -39,6 +39,7 @@ type Violation struct {
 	Severity   config.Severity
 	Command    string
 	Suggestion string
+	Fix        string
 	Extracted  map[string]string
 	Timedout   bool
 }
@@ -165,6 +166,7 @@ func (o *Orchestrator) Run(ctx context.Context) (*RunResult, error) {
 						Severity:   check.Severity,
 						Command:    check.Run,
 						Suggestion: "Skipped: required dependency failed",
+						Fix:        check.Fix,
 						Extracted:  result.Extracted,
 					}
 
@@ -261,6 +263,7 @@ func (o *Orchestrator) Run(ctx context.Context) (*RunResult, error) {
 						Severity:   check.Severity,
 						Command:    check.Run,
 						Suggestion: suggestion,
+						Fix:        check.Fix,
 						Extracted:  result.Extracted,
 						Timedout:   execResult.Timedout,
 					}
@@ -437,6 +440,7 @@ func (o *Orchestrator) RunCheck(ctx context.Context, checkID string) (*RunResult
 			Severity:   check.Severity,
 			Command:    check.Run,
 			Suggestion: suggestion,
+			Fix:        check.Fix,
 			Extracted:  result.Extracted,
 			Timedout:   execResult.Timedout,
 		}
