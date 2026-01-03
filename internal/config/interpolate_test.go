@@ -253,3 +253,39 @@ func TestInterpolateNilVars(t *testing.T) {
 		t.Errorf("Run should remain unchanged with nil vars: got %q", cfg.Checks[0].Run)
 	}
 }
+
+func TestInterpolateWithExtracted_InvalidTemplate(t *testing.T) {
+	// Test with an invalid Go template (unclosed action)
+	invalidTemplate := "value is {{.unclosed"
+
+	result := InterpolateWithExtracted(invalidTemplate, map[string]string{"key": "val"}, nil)
+
+	// On parsing error, should return original string
+	if result != invalidTemplate {
+		t.Errorf("InterpolateWithExtracted() with invalid template = %q, want original %q", result, invalidTemplate)
+	}
+}
+
+func TestInterpolateWithExtracted_MissingKeys(t *testing.T) {
+	// Test with a template that references missing keys
+	// Go templates output "<no value>" for missing keys by default
+	templateStr := "value: {{.missing}}"
+
+	result := InterpolateWithExtracted(templateStr, nil, nil)
+
+	// Template execution succeeds but outputs "<no value>" for missing keys
+	expected := "value: <no value>"
+	if result != expected {
+		t.Errorf("InterpolateWithExtracted() with missing key = %q, want %q", result, expected)
+	}
+}
+
+func TestInterpolateWithExtracted_NilMaps(t *testing.T) {
+	templateStr := "static text"
+
+	result := InterpolateWithExtracted(templateStr, nil, nil)
+
+	if result != templateStr {
+		t.Errorf("InterpolateWithExtracted() with nil maps = %q, want %q", result, templateStr)
+	}
+}

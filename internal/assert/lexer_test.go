@@ -184,3 +184,42 @@ func TestLexer_IllegalTokens(t *testing.T) {
 		})
 	}
 }
+
+func TestTokenType_String(t *testing.T) {
+	tests := []struct {
+		tokenType TokenType
+		expected  string
+	}{
+		{TokenEOF, "EOF"},
+		{TokenIllegal, "ILLEGAL"},
+		{TokenIdent, "IDENT"},
+		{TokenNumber, "NUMBER"},
+		{TokenString, "STRING"},
+		{TokenBool, "BOOL"},
+		{TokenPlus, "+"},
+		{TokenMinus, "-"},
+		{TokenAsterisk, "*"},
+		{TokenSlash, "/"},
+		{TokenEq, "=="},
+		{TokenNotEq, "!="},
+		{TokenLT, "<"},
+		{TokenGT, ">"},
+		{TokenLTE, "<="},
+		{TokenGTE, ">="},
+		{TokenAnd, "&&"},
+		{TokenOr, "||"},
+		{TokenNot, "!"},
+		{TokenLParen, "("},
+		{TokenRParen, ")"},
+		{TokenType(999), "UNKNOWN"}, // Test default case
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.expected, func(t *testing.T) {
+			got := tt.tokenType.String()
+			if got != tt.expected {
+				t.Errorf("TokenType(%d).String() = %q, want %q", tt.tokenType, got, tt.expected)
+			}
+		})
+	}
+}

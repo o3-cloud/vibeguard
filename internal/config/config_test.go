@@ -1000,3 +1000,124 @@ checks:
 		t.Errorf("expected error message to include 'line', got: %s", errMsg)
 	}
 }
+
+// ExecutionError tests
+func TestExecutionError_Error(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      *ExecutionError
+		expected string
+	}{
+		{
+			name: "with cause and line number",
+			err: &ExecutionError{
+				Message: "grok pattern failed",
+				CheckID: "test-check",
+				Cause:   errors.New("invalid pattern"),
+				LineNum: 42,
+			},
+			expected: `grok pattern failed in check "test-check": invalid pattern (line 42)`,
+		},
+		{
+			name: "with cause, no line number",
+			err: &ExecutionError{
+				Message: "assertion failed",
+				CheckID: "build",
+				Cause:   errors.New("coverage < 80%"),
+			},
+			expected: `assertion failed in check "build": coverage < 80%`,
+		},
+		{
+			name: "no cause, with line number",
+			err: &ExecutionError{
+				Message: "check timed out",
+				CheckID: "lint",
+				LineNum: 15,
+			},
+			expected: `check timed out in check "lint" (line 15)`,
+		},
+		{
+			name: "no cause, no line number",
+			err: &ExecutionError{
+				Message: "command failed",
+				CheckID: "test",
+			},
+			expected: `command failed in check "test"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.err.Error()
+			if got != tt.expected {
+				t.Errorf("Error() = %q, want %q", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestExecutionError_Unwrap(t *testing.T) {
+	cause := errors.New("underlying cause")
+	err := &ExecutionError{
+		Message: "wrapper",
+		CheckID: "test",
+		Cause:   cause,
+	}
+
+	unwrapped := err.Unwrap()
+	if unwrapped != cause {
+		t.Errorf("Unwrap() = %v, want %v", unwrapped, cause)
+	}
+
+	// Test with nil cause
+	errNoCause := &ExecutionError{
+		Message: "no cause",
+		CheckID: "test",
+	}
+	if unwrapped := errNoCause.Unwrap(); unwrapped != nil {
+		t.Errorf("Unwrap() with nil cause = %v, want nil", unwrapped)
+	}
+}
+
+func TestIsExecutionError(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		expected bool
+	}{
+		{
+			name:     "direct execution error",
+			err:      &ExecutionError{Message: "test", CheckID: "check"},
+			expected: true,
+		},
+		{
+			name:     "wrapped execution error",
+			err:      errors.Join(errors.New("wrapper"), &ExecutionError{Message: "test", CheckID: "check"}),
+			expected: true,
+		},
+		{
+			name:     "regular error",
+			err:      errors.New("not an execution error"),
+			expected: false,
+		},
+		{
+			name:     "config error",
+			err:      &ConfigError{Message: "config issue"},
+			expected: false,
+		},
+		{
+			name:     "nil error",
+			err:      nil,
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := IsExecutionError(tt.err)
+			if got != tt.expected {
+				t.Errorf("IsExecutionError() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}

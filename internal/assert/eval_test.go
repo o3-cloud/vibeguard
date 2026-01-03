@@ -438,3 +438,48 @@ func TestEvaluator_SingleQuoteStrings(t *testing.T) {
 		t.Error("expected single-quoted string comparison to work")
 	}
 }
+
+// Value type tests
+func TestValue_String(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"hello", "hello"},
+		{"42", "42"},
+		{"", ""},
+		{"3.14", "3.14"},
+		{"true", "true"},
+	}
+
+	for _, tt := range tests {
+		v := NewValue(tt.input)
+		if got := v.String(); got != tt.expected {
+			t.Errorf("Value(%q).String() = %q, want %q", tt.input, got, tt.expected)
+		}
+	}
+}
+
+func TestValue_IsNumeric(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected bool
+	}{
+		{"42", true},
+		{"3.14", true},
+		{"-10", true},
+		{"0", true},
+		{"1e10", true},
+		{"hello", false},
+		{"", false},
+		{"true", false},
+		{"12abc", false},
+	}
+
+	for _, tt := range tests {
+		v := NewValue(tt.input)
+		if got := v.IsNumeric(); got != tt.expected {
+			t.Errorf("Value(%q).IsNumeric() = %v, want %v", tt.input, got, tt.expected)
+		}
+	}
+}
