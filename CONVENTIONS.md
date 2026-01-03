@@ -15,15 +15,15 @@ vibeguard/
 ├── cmd/
 │   └── vibeguard/          # Main application entry point
 ├── internal/
+│   ├── assert/             # Assertion expression evaluation
 │   ├── cli/                # Command-line interface and Cobra commands
-│   ├── policy/             # Policy evaluation and management
-│   ├── judge/              # Judge invocation and integration
-│   ├── runner/             # Policy runner implementations
-│   └── config/             # Configuration loading and parsing
-├── pkg/
-│   └── models/             # Shared data models and interfaces
+│   ├── config/             # Configuration loading and parsing
+│   ├── executor/           # Policy execution logic
+│   ├── grok/               # Grok pattern matching and parsing
+│   ├── orchestrator/       # Policy orchestration and coordination
+│   ├── output/             # Output formatting and rendering
+│   └── version/            # Version information
 ├── docs/                   # Documentation and ADRs
-├── tests/                  # Integration and end-to-end tests
 └── go.mod, go.sum          # Go module files
 ```
 
@@ -31,7 +31,6 @@ vibeguard/
 
 - **`cmd/`** — Application entry points (may have multiple binaries in future)
 - **`internal/`** — Private packages used only within VibeGuard; not importable by external packages
-- **`pkg/`** — Public APIs and data models that may be used by external packages
 
 ## Go Code Style
 
