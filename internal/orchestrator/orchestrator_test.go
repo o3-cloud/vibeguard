@@ -4,6 +4,7 @@ package orchestrator
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 
@@ -1638,5 +1639,283 @@ func TestRun_GrokExtractedInViolation(t *testing.T) {
 	// Verify extracted values are propagated to violation
 	if result.Violations[0].Extracted["coverage"] != "50.0" {
 		t.Errorf("expected violation to have coverage=50.0, got %v", result.Violations[0].Extracted)
+	}
+}
+
+// File field tests
+
+func TestRun_FileField_ReadsFromFile(t *testing.T) {
+	// Create a temporary file with test content
+	tmpFile := "/tmp/vibeguard_test_file.txt"
+	fileContent := "coverage: 85.5%"
+	if err := os.WriteFile(tmpFile, []byte(fileContent), 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+	defer func() { _ = os.Remove(tmpFile) }()
+
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{
+				ID:       "file-check",
+				Run:      "echo ignored",
+				File:     tmpFile,
+				Grok:     []string{"coverage: (?P<coverage>[0-9.]+)%"},
+				Severity: config.SeverityError,
+			},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 1, false, false)
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(result.Results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result.Results))
+	}
+
+	// Verify grok pattern was applied to file content, not command output
+	if result.Results[0].Extracted["coverage"] != "85.5" {
+		t.Errorf("expected coverage=85.5 from file, got %q", result.Results[0].Extracted["coverage"])
+	}
+
+	if !result.Results[0].Passed {
+		t.Error("expected check to pass with successful grok match on file")
+	}
+}
+
+func TestRun_FileField_MissingFile_ReturnsError(t *testing.T) {
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{
+				ID:       "file-check",
+				Run:      "exit 0",
+				File:     "/nonexistent/file.txt",
+				Severity: config.SeverityError,
+			},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 1, false, false)
+
+	_, err := orch.Run(context.Background())
+	if err == nil {
+		t.Fatal("expected error for missing file, got nil")
+	}
+
+	// Should be an execution error, not a config error
+	if !config.IsExecutionError(err) {
+		t.Errorf("expected ExecutionError, got %T: %v", err, err)
+	}
+}
+
+func TestRun_FileField_WithAssertion(t *testing.T) {
+	tmpFile := "/tmp/vibeguard_test_file_assert.txt"
+	fileContent := "coverage: 85.5%"
+	if err := os.WriteFile(tmpFile, []byte(fileContent), 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+	defer func() { _ = os.Remove(tmpFile) }()
+
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{
+				ID:       "file-check",
+				Run:      "exit 0",
+				File:     tmpFile,
+				Grok:     []string{"coverage: (?P<coverage>[0-9.]+)%"},
+				Assert:   "coverage >= 80",
+				Severity: config.SeverityError,
+			},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 1, false, false)
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(result.Results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result.Results))
+	}
+
+	// Assertion should pass because coverage is >= 80
+	if !result.Results[0].Passed {
+		t.Error("expected assertion to pass (coverage >= 80)")
+	}
+}
+
+func TestRun_FileField_WithAssertion_Fails(t *testing.T) {
+	tmpFile := "/tmp/vibeguard_test_file_assert_fail.txt"
+	fileContent := "coverage: 50.0%"
+	if err := os.WriteFile(tmpFile, []byte(fileContent), 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+	defer func() { _ = os.Remove(tmpFile) }()
+
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{
+				ID:       "file-check",
+				Run:      "exit 0",
+				File:     tmpFile,
+				Grok:     []string{"coverage: (?P<coverage>[0-9.]+)%"},
+				Assert:   "coverage >= 80",
+				Severity: config.SeverityError,
+			},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 1, false, false)
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(result.Results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result.Results))
+	}
+
+	// Assertion should fail because coverage is < 80
+	if result.Results[0].Passed {
+		t.Error("expected assertion to fail (coverage < 80)")
+	}
+
+	if len(result.Violations) != 1 {
+		t.Errorf("expected 1 violation, got %d", len(result.Violations))
+	}
+}
+
+func TestRunCheck_FileField_ReadsFromFile(t *testing.T) {
+	tmpFile := "/tmp/vibeguard_test_file_check.txt"
+	fileContent := "version: 1.2.3"
+	if err := os.WriteFile(tmpFile, []byte(fileContent), 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+	defer func() { _ = os.Remove(tmpFile) }()
+
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{
+				ID:       "version-check",
+				Run:      "echo ignored",
+				File:     tmpFile,
+				Grok:     []string{"version: (?P<ver>[0-9.]+)"},
+				Severity: config.SeverityError,
+			},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 1, false, false)
+
+	result, err := orch.RunCheck(context.Background(), "version-check")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(result.Results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result.Results))
+	}
+
+	if result.Results[0].Extracted["ver"] != "1.2.3" {
+		t.Errorf("expected ver=1.2.3, got %q", result.Results[0].Extracted["ver"])
+	}
+}
+
+func TestRun_FileField_WithVariableInterpolation(t *testing.T) {
+	tmpFile := "/tmp/vibeguard_test_file_vars.txt"
+	fileContent := "status: ok"
+	if err := os.WriteFile(tmpFile, []byte(fileContent), 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+	defer func() { _ = os.Remove(tmpFile) }()
+
+	cfg := &config.Config{
+		Version: "1",
+		Vars: map[string]string{
+			"outputFile": tmpFile,
+		},
+		Checks: []config.Check{
+			{
+				ID:       "var-file-check",
+				Run:      "exit 0",
+				File:     "{{.outputFile}}",
+				Grok:     []string{"status: (?P<status>[a-z]+)"},
+				Severity: config.SeverityError,
+			},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 1, false, false)
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(result.Results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result.Results))
+	}
+
+	if result.Results[0].Extracted["status"] != "ok" {
+		t.Errorf("expected status=ok, got %q", result.Results[0].Extracted["status"])
+	}
+}
+
+func TestRun_FileField_WithoutGrok_StillReads(t *testing.T) {
+	tmpFile := "/tmp/vibeguard_test_file_no_grok.txt"
+	fileContent := "some test content"
+	if err := os.WriteFile(tmpFile, []byte(fileContent), 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+	defer func() { _ = os.Remove(tmpFile) }()
+
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{
+				ID:       "file-no-grok",
+				Run:      "exit 0",
+				File:     tmpFile,
+				Severity: config.SeverityError,
+			},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 1, false, false)
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(result.Results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result.Results))
+	}
+
+	// Without grok, should have empty extracted map but still pass
+	if len(result.Results[0].Extracted) != 0 {
+		t.Errorf("expected empty extracted map, got %v", result.Results[0].Extracted)
+	}
+
+	if !result.Results[0].Passed {
+		t.Error("expected check to pass (exit 0, no grok patterns)")
 	}
 }

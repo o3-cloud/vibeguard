@@ -5,6 +5,8 @@ package orchestrator
 import (
 	"context"
 	"fmt"
+	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -65,6 +67,32 @@ func New(cfg *config.Config, exec *executor.Executor, maxParallel int, failFast,
 		failFast:    failFast,
 		verbose:     verbose,
 	}
+}
+
+// getAnalysisOutput returns the content to analyze for grok patterns and assertions.
+// If the check specifies a file field, it reads from that file.
+// Otherwise, it returns the command output.
+func (o *Orchestrator) getAnalysisOutput(check *config.Check, execResult *executor.Result) (string, error) {
+	if check.File != "" {
+		// Interpolate variables in the file path
+		filePath := o.interpolatePath(check.File)
+		content, err := os.ReadFile(filePath)
+		if err != nil {
+			return "", fmt.Errorf("failed to read file %q: %w", filePath, err)
+		}
+		return string(content), nil
+	}
+	return execResult.Combined, nil
+}
+
+// interpolatePath performs variable substitution on a file path.
+func (o *Orchestrator) interpolatePath(path string) string {
+	result := path
+	for key, value := range o.config.Vars {
+		placeholder := "{{." + key + "}}"
+		result = strings.ReplaceAll(result, placeholder, value)
+	}
+	return result
 }
 
 // Run executes all checks and returns the results.
@@ -194,6 +222,20 @@ func (o *Orchestrator) Run(ctx context.Context) (*RunResult, error) {
 					return execErr
 				}
 
+				// Get the content to analyze (either from file or command output)
+				analysisOutput, analysisErr := o.getAnalysisOutput(check, execResult)
+				if analysisErr != nil {
+					// Wrap file reading error with check context
+					lineNum := o.config.FindCheckNodeLine(check.ID, checkIndex)
+					return &config.ExecutionError{
+						Message:   analysisErr.Error(),
+						Cause:     analysisErr,
+						CheckID:   check.ID,
+						LineNum:   lineNum,
+						ErrorType: "file",
+					}
+				}
+
 				// Apply grok patterns to extract values from output
 				extracted := make(map[string]string)
 				if len(check.Grok) > 0 {
@@ -209,7 +251,7 @@ func (o *Orchestrator) Run(ctx context.Context) (*RunResult, error) {
 							ErrorType: "grok",
 						}
 					}
-					extracted, matcherErr = matcher.Match(execResult.Combined)
+					extracted, matcherErr = matcher.Match(analysisOutput)
 					if matcherErr != nil {
 						// Wrap grok error with check context
 						lineNum := o.config.FindCheckNodeLine(check.ID, checkIndex)
@@ -373,6 +415,20 @@ func (o *Orchestrator) RunCheck(ctx context.Context, checkID string) (*RunResult
 		return nil, err
 	}
 
+	// Get the content to analyze (either from file or command output)
+	analysisOutput, analysisErr := o.getAnalysisOutput(check, execResult)
+	if analysisErr != nil {
+		// Wrap file reading error with check context
+		lineNum := o.config.FindCheckNodeLine(check.ID, checkIndex)
+		return nil, &config.ExecutionError{
+			Message:   analysisErr.Error(),
+			Cause:     analysisErr,
+			CheckID:   check.ID,
+			LineNum:   lineNum,
+			ErrorType: "file",
+		}
+	}
+
 	// Apply grok patterns to extract values from output
 	extracted := make(map[string]string)
 	if len(check.Grok) > 0 {
@@ -388,7 +444,7 @@ func (o *Orchestrator) RunCheck(ctx context.Context, checkID string) (*RunResult
 				ErrorType: "grok",
 			}
 		}
-		extracted, matcherErr = matcher.Match(execResult.Combined)
+		extracted, matcherErr = matcher.Match(analysisOutput)
 		if matcherErr != nil {
 			// Wrap grok error with check context
 			lineNum := o.config.FindCheckNodeLine(check.ID, checkIndex)
