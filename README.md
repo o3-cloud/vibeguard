@@ -161,7 +161,7 @@ checks:
 
     # Optional: Extract data from command output using grok patterns
     grok:
-      - pattern_name: pattern
+      - pattern_string
       # Multiple patterns can be specified as a list
 
     # Optional: Assert extracted data meets conditions
