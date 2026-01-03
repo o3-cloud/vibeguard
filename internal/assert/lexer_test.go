@@ -185,6 +185,40 @@ func TestLexer_IllegalTokens(t *testing.T) {
 	}
 }
 
+func TestLexer_DigitBoundary(t *testing.T) {
+	// Test digit detection at boundaries to ensure '0' through '9' are recognized
+	// and characters just outside that range are not.
+	tests := []struct {
+		name     string
+		input    string
+		wantType TokenType
+		wantLit  string
+	}{
+		// Test that '9' is recognized as part of a number
+		{"digit 9 recognized", "9", TokenNumber, "9"},
+		{"digit 0 recognized", "0", TokenNumber, "0"},
+		// Numbers with all digits 0-9
+		{"all digits", "1234567890", TokenNumber, "1234567890"},
+		// Colon ':' (ASCII 58, right after '9' which is 57) should not be a digit
+		{"colon after number", "9:", TokenNumber, "9"},
+		// Slash '/' (ASCII 47, right before '0' which is 48) should not be a digit
+		{"number then slash", "0/", TokenNumber, "0"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := NewLexer(tt.input)
+			tok := l.NextToken()
+			if tok.Type != tt.wantType {
+				t.Errorf("got type %v, want %v", tok.Type, tt.wantType)
+			}
+			if tok.Literal != tt.wantLit {
+				t.Errorf("got literal %q, want %q", tok.Literal, tt.wantLit)
+			}
+		})
+	}
+}
+
 func TestTokenType_String(t *testing.T) {
 	tests := []struct {
 		tokenType TokenType

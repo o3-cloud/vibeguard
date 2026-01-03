@@ -1,6 +1,7 @@
 package assert
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -326,6 +327,55 @@ func TestEvaluator_ParseErrors(t *testing.T) {
 			_, err := e.Eval(tt.expr, nil)
 			if err == nil {
 				t.Errorf("expected error for %q, got nil", tt.expr)
+			}
+		})
+	}
+}
+
+func TestEvaluator_ParseErrorContext(t *testing.T) {
+	// Tests that verify error messages include proper context with pointer
+	tests := []struct {
+		name        string
+		expr        string
+		wantContain string
+	}{
+		{
+			name:        "error at position 1",
+			expr:        "@",
+			wantContain: "^",
+		},
+		{
+			name:        "error shows input",
+			expr:        "10 + @",
+			wantContain: "10 + @",
+		},
+		{
+			name:        "long expression error",
+			expr:        "a && b && c && @",
+			wantContain: "a && b && c && @",
+		},
+		{
+			name:        "error at start",
+			expr:        ")",
+			wantContain: "^",
+		},
+		{
+			name:        "error in middle",
+			expr:        "10 + + 20",
+			wantContain: "^",
+		},
+	}
+
+	e := New()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := e.Eval(tt.expr, nil)
+			if err == nil {
+				t.Fatalf("expected error for %q, got nil", tt.expr)
+			}
+			errStr := err.Error()
+			if !strings.Contains(errStr, tt.wantContain) {
+				t.Errorf("error %q should contain %q", errStr, tt.wantContain)
 			}
 		})
 	}

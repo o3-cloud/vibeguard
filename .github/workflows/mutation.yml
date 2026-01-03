@@ -1,0 +1,40 @@
+name: Mutation Testing
+
+on:
+  schedule:
+    - cron: '0 2 * * 0'  # Weekly on Sunday at 2 AM UTC
+  workflow_dispatch:  # Manual trigger
+
+jobs:
+  mutation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Install Gremlins
+        run: go install github.com/go-gremlins/gremlins/cmd/gremlins@latest
+
+      - name: Run mutation testing
+        run: gremlins unleash ./internal/assert --threshold-efficacy 50
+        timeout-minutes: 10
+
+      - name: Run full mutation analysis
+        if: always()
+        run: |
+          echo "## Full Mutation Report" >> $GITHUB_STEP_SUMMARY
+          gremlins unleash ./internal/assert 2>&1 | tee mutation-report.txt
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          cat mutation-report.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload mutation report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mutation-report
+          path: mutation-report.txt

@@ -1,0 +1,21 @@
+# Minimal mutation testing config optimized for speed
+# See ADR-007 for full documentation
+
+unleash:
+  workers: 4
+  timeout-coefficient: 10
+
+  # Enable key mutation operators
+  arithmetic-base: true
+  conditionals-boundary: true
+  conditionals-negation: true
+  increment-decrement: true
+  invert-negatives: true
+
+  # Disable slower/less useful operators
+  invert-assignments: false
+  invert-bitwise: false
+  invert-bwassign: false
+  invert-logical: false
+  invert-loopctrl: false
+  remove-self-assignments: false
