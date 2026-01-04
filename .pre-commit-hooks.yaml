@@ -1,0 +1,59 @@
+# pre-commit hooks for VibeGuard
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+#
+# Usage: Add the following to your .pre-commit-config.yaml:
+#
+# repos:
+#   - repo: https://github.com/vibeguard/vibeguard
+#     rev: v1.0.0
+#     hooks:
+#       - id: vibeguard
+#
+# Or for local installation:
+#
+# repos:
+#   - repo: local
+#     hooks:
+#       - id: vibeguard
+#         name: VibeGuard Policy Checks
+#         entry: vibeguard check
+#         language: golang
+#         pass_filenames: false
+#         always_run: true
+
+- id: vibeguard
+  name: VibeGuard Policy Checks
+  description: Run VibeGuard policy enforcement checks
+  entry: vibeguard check
+  language: golang
+  pass_filenames: false
+  always_run: true
+  stages: [pre-commit]
+
+- id: vibeguard-fail-fast
+  name: VibeGuard Policy Checks (fail-fast)
+  description: Run VibeGuard checks, stopping on first failure
+  entry: vibeguard check --fail-fast
+  language: golang
+  pass_filenames: false
+  always_run: true
+  stages: [pre-commit]
+
+- id: vibeguard-verbose
+  name: VibeGuard Policy Checks (verbose)
+  description: Run VibeGuard checks with verbose output
+  entry: vibeguard check --verbose
+  language: golang
+  pass_filenames: false
+  always_run: true
+  stages: [pre-commit]
+
+- id: vibeguard-validate
+  name: VibeGuard Config Validation
+  description: Validate VibeGuard configuration without running checks
+  entry: vibeguard validate
+  language: golang
+  files: (vibeguard\.ya?ml|\.vibeguard\.ya?ml)$
+  pass_filenames: false
+  stages: [pre-commit]

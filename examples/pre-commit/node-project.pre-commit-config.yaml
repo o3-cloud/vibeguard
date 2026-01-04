@@ -1,0 +1,98 @@
+# Pre-commit configuration for Node.js/TypeScript projects with VibeGuard
+# Copy this file to your project root as .pre-commit-config.yaml
+#
+# This configuration combines VibeGuard policy enforcement with
+# JavaScript/TypeScript ecosystem hooks for comprehensive quality gates.
+
+repos:
+  # VibeGuard - Primary quality gate
+  # Runs checks defined in vibeguard.yaml (lint, typecheck, test, build, etc.)
+  - repo: local
+    hooks:
+      - id: vibeguard
+        name: VibeGuard Policy Checks
+        entry: vibeguard check --fail-fast
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
+  # Standard pre-commit hooks for file hygiene
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: '\.md$'
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ['--maxkb=500']
+      - id: detect-private-key
+      - id: check-case-conflict
+
+  # JavaScript/TypeScript hooks (optional - VibeGuard can handle these)
+  # Uncomment if you want pre-commit to run these directly
+  # - repo: https://github.com/pre-commit/mirrors-eslint
+  #   rev: v9.17.0
+  #   hooks:
+  #     - id: eslint
+  #       files: \.[jt]sx?$
+  #       types: [file]
+  #       additional_dependencies:
+  #         - eslint@9.17.0
+  #         - typescript
+  #         - '@typescript-eslint/parser'
+  #         - '@typescript-eslint/eslint-plugin'
+
+  # - repo: https://github.com/pre-commit/mirrors-prettier
+  #   rev: v4.0.0-alpha.8
+  #   hooks:
+  #     - id: prettier
+  #       types_or: [javascript, jsx, ts, tsx, json, css, scss, markdown]
+
+  # Commit message validation (Conventional Commits)
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v4.0.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+
+# Example vibeguard.yaml for Node.js projects:
+#
+# version: "1"
+# vars:
+#   src_dir: "src"
+#
+# checks:
+#   - id: prettier
+#     run: npx prettier --check {{.src_dir}}
+#     severity: error
+#     suggestion: "Run 'npx prettier --write .' to fix formatting"
+#     timeout: 30s
+#
+#   - id: lint
+#     run: npm run lint
+#     severity: error
+#     timeout: 60s
+#
+#   - id: typecheck
+#     run: npx tsc --noEmit
+#     severity: error
+#     timeout: 60s
+#
+#   - id: test
+#     run: npm test -- --coverage --coverageReporters=text
+#     grok:
+#       - 'All files.*\|\s*%{NUMBER:coverage}'
+#     assert: "coverage >= 80"
+#     suggestion: "Coverage is {{.coverage}}%, need 80%"
+#     timeout: 120s
+#     requires: [lint, typecheck]
+#
+#   - id: build
+#     run: npm run build
+#     severity: error
+#     timeout: 120s
+#     requires: [test]

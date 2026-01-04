@@ -1,0 +1,86 @@
+# Pre-commit configuration for Go projects with VibeGuard
+# Copy this file to your project root as .pre-commit-config.yaml
+#
+# This configuration combines VibeGuard policy enforcement with
+# Go-specific pre-commit hooks for comprehensive quality gates.
+
+repos:
+  # VibeGuard - Primary quality gate for Go checks
+  # Runs checks defined in vibeguard.yaml (vet, fmt, lint, test, build, etc.)
+  - repo: local
+    hooks:
+      - id: vibeguard
+        name: VibeGuard Policy Checks
+        entry: vibeguard check --fail-fast
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
+  # Standard pre-commit hooks for file hygiene
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: '\.md$'
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ['--maxkb=500']
+      - id: detect-private-key
+
+  # Go-specific hooks (optional - VibeGuard can handle these via vibeguard.yaml)
+  # Uncomment if you want pre-commit to run these directly
+  # - repo: https://github.com/dnephin/pre-commit-golang
+  #   rev: v0.5.1
+  #   hooks:
+  #     - id: go-fmt
+  #     - id: go-vet
+  #     - id: go-imports
+  #     - id: go-cyclo
+  #       args: [-over=15]
+  #     - id: golangci-lint
+  #     - id: go-unit-tests
+
+  # Commit message validation (Conventional Commits)
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v4.0.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+
+# Example vibeguard.yaml for Go projects:
+#
+# version: "1"
+# vars:
+#   go_packages: "./..."
+#
+# checks:
+#   - id: fmt
+#     run: test -z "$(gofmt -l .)"
+#     severity: error
+#     timeout: 5s
+#
+#   - id: vet
+#     run: go vet {{.go_packages}}
+#     severity: error
+#     timeout: 10s
+#
+#   - id: lint
+#     run: golangci-lint run {{.go_packages}}
+#     severity: error
+#     timeout: 30s
+#
+#   - id: test
+#     run: go test {{.go_packages}}
+#     severity: error
+#     timeout: 60s
+#     requires: [vet, lint]
+#
+#   - id: build
+#     run: go build ./cmd/...
+#     severity: error
+#     timeout: 30s
+#     requires: [test]

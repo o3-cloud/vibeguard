@@ -1,0 +1,131 @@
+# Pre-commit configuration for multi-language/polyglot projects with VibeGuard
+# Copy this file to your project root as .pre-commit-config.yaml
+#
+# This configuration shows how to use VibeGuard alongside hooks for
+# multiple languages in a monorepo or polyglot project.
+
+repos:
+  # VibeGuard - Primary quality gate
+  # Define language-specific checks in vibeguard.yaml
+  - repo: local
+    hooks:
+      - id: vibeguard
+        name: VibeGuard Policy Checks
+        entry: vibeguard check --verbose
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
+  # Standard pre-commit hooks for all languages
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: '\.md$'
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-toml
+      - id: check-xml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: detect-private-key
+      - id: check-case-conflict
+      - id: check-executables-have-shebangs
+      - id: check-shebang-scripts-are-executable
+
+  # Security scanning
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: ['--baseline', '.secrets.baseline']
+        exclude: 'package-lock\.json|go\.sum'
+
+  # Shell script linting
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.10.0.1
+    hooks:
+      - id: shellcheck
+        args: ['-x']
+
+  # Dockerfile linting
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.13.1-beta
+    hooks:
+      - id: hadolint
+
+  # YAML linting (for config files)
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.35.1
+    hooks:
+      - id: yamllint
+        args: ['-d', '{extends: relaxed, rules: {line-length: {max: 120}}}']
+
+  # Markdown linting
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.44.0
+    hooks:
+      - id: markdownlint
+        args: ['--fix']
+
+  # Commit message validation
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v4.0.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+
+# Example vibeguard.yaml for multi-language projects:
+#
+# version: "1"
+# vars:
+#   go_dir: "services/api"
+#   node_dir: "frontend"
+#   python_dir: "scripts"
+#
+# checks:
+#   # Go checks
+#   - id: go-vet
+#     run: cd {{.go_dir}} && go vet ./...
+#     severity: error
+#     timeout: 30s
+#
+#   - id: go-test
+#     run: cd {{.go_dir}} && go test ./...
+#     severity: error
+#     timeout: 120s
+#     requires: [go-vet]
+#
+#   # Node.js checks
+#   - id: node-lint
+#     run: cd {{.node_dir}} && npm run lint
+#     severity: error
+#     timeout: 60s
+#
+#   - id: node-test
+#     run: cd {{.node_dir}} && npm test
+#     severity: error
+#     timeout: 120s
+#     requires: [node-lint]
+#
+#   # Python checks
+#   - id: python-lint
+#     run: cd {{.python_dir}} && ruff check .
+#     severity: error
+#     timeout: 30s
+#
+#   - id: python-test
+#     run: cd {{.python_dir}} && pytest
+#     severity: error
+#     timeout: 60s
+#     requires: [python-lint]
+#
+#   # Integration tests (run after all unit tests)
+#   - id: integration
+#     run: ./scripts/run-integration-tests.sh
+#     severity: error
+#     timeout: 300s
+#     requires: [go-test, node-test, python-test]

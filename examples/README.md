@@ -143,8 +143,23 @@ If you create a new configuration that might be useful for others:
 3. Include inline comments explaining key configuration options
 4. Submit a pull request to share it with the community
 
+### pre-commit/
+
+**Use case:** Integration with the pre-commit framework
+
+Example `.pre-commit-config.yaml` files showing how to integrate VibeGuard with pre-commit hooks:
+
+- `basic.pre-commit-config.yaml` — Minimal configuration with just VibeGuard
+- `go-project.pre-commit-config.yaml` — Go project with VibeGuard and Go-specific hooks
+- `node-project.pre-commit-config.yaml` — Node.js/TypeScript project configuration
+- `multi-language.pre-commit-config.yaml` — Polyglot project with multiple language hooks
+
+See `pre-commit/README.md` for detailed setup instructions.
+
 ## See Also
 
 - [Configuration Schema](../README.md#configuration-schema)
 - [CLI Reference](../README.md#cli-reference)
 - [CONVENTIONS.md](../CONVENTIONS.md)
+- [Pre-commit Framework](https://pre-commit.com)
+- [Ecosystem Comparison](../docs/ECOSYSTEM-COMPARISON.md)

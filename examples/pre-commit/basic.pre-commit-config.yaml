@@ -1,0 +1,33 @@
+# Basic pre-commit configuration with VibeGuard
+# Copy this file to your project root as .pre-commit-config.yaml
+#
+# This minimal configuration uses VibeGuard as the primary quality gate.
+# VibeGuard will run all checks defined in your vibeguard.yaml file.
+
+repos:
+  # VibeGuard - Primary quality gate
+  # Once published, use the GitHub repo directly:
+  # - repo: https://github.com/vibeguard/vibeguard
+  #   rev: v1.0.0
+  #   hooks:
+  #     - id: vibeguard
+
+  # For local development, use the system-installed binary:
+  - repo: local
+    hooks:
+      - id: vibeguard
+        name: VibeGuard Policy Checks
+        entry: vibeguard check
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
+  # Optional: Standard pre-commit hooks for file hygiene
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
