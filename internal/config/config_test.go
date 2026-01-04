@@ -1214,3 +1214,349 @@ func TestValidCheckIDRegex(t *testing.T) {
 		})
 	}
 }
+
+// Edge case tests for boundary conditions in config validation
+func TestLoad_EmptyStringVersion(t *testing.T) {
+	// Test that empty version is treated as default
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "vibeguard.yaml")
+
+	content := `
+version: ""
+checks:
+  - id: test
+    run: echo hello
+`
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("expected no error for empty version (should be set to default), got: %v", err)
+	}
+
+	if cfg.Version != "1" {
+		t.Errorf("expected default version '1' for empty string, got: %s", cfg.Version)
+	}
+}
+
+func TestLoad_MultipleEmptyChecks(t *testing.T) {
+	// Test config with multiple checks, one with empty fields
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "vibeguard.yaml")
+
+	content := `
+version: "1"
+checks:
+  - id: first
+    run: go test ./...
+  - id: ""
+    run: go vet ./...
+`
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Load(configPath)
+	if err == nil {
+		t.Fatal("expected error for empty check id")
+	}
+
+	if !strings.Contains(err.Error(), "no id") {
+		t.Errorf("expected 'no id' in error message, got: %s", err.Error())
+	}
+}
+
+func TestLoad_BoundaryCheckIndex(t *testing.T) {
+	// Test that error reporting works correctly at different check indices
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "vibeguard.yaml")
+
+	content := `
+version: "1"
+checks:
+  - id: first
+    run: go test ./...
+  - id: second
+    run: go build ./...
+  - id: third
+    run: ""
+`
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Load(configPath)
+	if err == nil {
+		t.Fatal("expected error for empty run command")
+	}
+
+	configErr, ok := err.(*ConfigError)
+	if !ok {
+		t.Fatalf("expected ConfigError, got: %T", err)
+	}
+
+	// Verify line number is present for the third check
+	if configErr.LineNum == 0 {
+		t.Error("expected non-zero line number for missing run command")
+	}
+}
+
+func TestLoad_SeverityBoundaryValues(t *testing.T) {
+	// Test edge cases around severity handling
+	tests := []struct {
+		name        string
+		severity    string
+		wantErr     bool
+		wantErrMsg  string
+		expectedSev Severity
+	}{
+		{"error severity", "error", false, "", SeverityError},
+		{"warning severity", "warning", false, "", SeverityWarning},
+		{"lowercase error", "error", false, "", SeverityError},
+		{"uppercase ERROR", "ERROR", true, "invalid severity", ""},
+		{"empty string omitted", "", false, "", SeverityError}, // Will use default
+		{"unknown severity", "critical", true, "invalid severity", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			configPath := filepath.Join(dir, "vibeguard.yaml")
+
+			content := `
+version: "1"
+checks:
+  - id: test
+    run: echo hello`
+			if tt.severity != "" && tt.severity != "empty string omitted" {
+				content += "\n    severity: " + tt.severity
+			}
+
+			if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+				t.Fatal(err)
+			}
+
+			cfg, err := Load(configPath)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("expected error for severity %q", tt.severity)
+				} else if !strings.Contains(err.Error(), tt.wantErrMsg) {
+					t.Errorf("expected %q in error, got: %s", tt.wantErrMsg, err.Error())
+				}
+			} else {
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				} else if cfg.Checks[0].Severity != tt.expectedSev {
+					t.Errorf("expected severity %q, got %q", tt.expectedSev, cfg.Checks[0].Severity)
+				}
+			}
+		})
+	}
+}
+
+func TestLoad_TimeoutZeroBoundary(t *testing.T) {
+	// Test timeout edge cases
+	tests := []struct {
+		name       string
+		timeout    string
+		wantErr    bool
+		wantValue  time.Duration
+		hasTimeout bool // whether timeout is explicitly set
+	}{
+		// Note: applyDefaults treats timeout == 0 as "not set" and applies default
+		{"zero duration treated as unset", "0s", false, DefaultTimeout, true},
+		{"negative duration", "-1s", false, -1 * time.Second, true}, // Go allows this, but may be semantically wrong
+		{"very large duration", "8760h", false, 8760 * time.Hour, true},
+		{"omitted uses default", "", false, DefaultTimeout, false},
+		{"smallest positive duration", "1ns", false, 1 * time.Nanosecond, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			configPath := filepath.Join(dir, "vibeguard.yaml")
+
+			content := `
+version: "1"
+checks:
+  - id: test
+    run: echo hello`
+			if tt.hasTimeout {
+				content += "\n    timeout: " + tt.timeout
+			}
+
+			if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+				t.Fatal(err)
+			}
+
+			cfg, err := Load(configPath)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("expected error for timeout %q", tt.timeout)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				} else if cfg.Checks[0].Timeout != Duration(tt.wantValue) {
+					t.Errorf("expected timeout %v, got %v", tt.wantValue, cfg.Checks[0].Timeout)
+				}
+			}
+		})
+	}
+}
+
+func TestLoad_DependencyOrderBoundary(t *testing.T) {
+	// Test edge case where multiple checks require the same dependency
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "vibeguard.yaml")
+
+	content := `
+version: "1"
+checks:
+  - id: base
+    run: echo base
+  - id: check1
+    run: echo check1
+    requires:
+      - base
+  - id: check2
+    run: echo check2
+    requires:
+      - base
+  - id: check3
+    run: echo check3
+    requires:
+      - check1
+      - check2
+`
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("expected valid DAG with multiple checks depending on same node, got: %v", err)
+	}
+
+	if len(cfg.Checks) != 4 {
+		t.Errorf("expected 4 checks, got: %d", len(cfg.Checks))
+	}
+}
+
+func TestLoad_LongDependencyChain(t *testing.T) {
+	// Test a long chain of dependencies without cycles
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "vibeguard.yaml")
+
+	content := `
+version: "1"
+checks:
+  - id: a
+    run: echo a
+  - id: b
+    run: echo b
+    requires: [a]
+  - id: c
+    run: echo c
+    requires: [b]
+  - id: d
+    run: echo d
+    requires: [c]
+  - id: e
+    run: echo e
+    requires: [d]
+`
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("expected valid chain dependency, got: %v", err)
+	}
+
+	if len(cfg.Checks) != 5 {
+		t.Errorf("expected 5 checks in long chain, got: %d", len(cfg.Checks))
+	}
+}
+
+func TestConfigError_EmptyMessage(t *testing.T) {
+	// Test ConfigError with empty message
+	err := &ConfigError{Message: ""}
+	errStr := err.Error()
+	if errStr != "" {
+		t.Errorf("expected empty string for empty message, got: %q", errStr)
+	}
+}
+
+func TestConfigError_LineNumberBoundary(t *testing.T) {
+	// Test ConfigError line number edge cases
+	tests := []struct {
+		name     string
+		lineNum  int
+		expected string
+	}{
+		{"zero line", 0, "test message"},
+		{"line 1", 1, "test message (line 1)"},
+		{"large line number", 9999, "test message (line 9999)"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := &ConfigError{Message: "test message", LineNum: tt.lineNum}
+			got := err.Error()
+			if got != tt.expected {
+				t.Errorf("expected %q, got %q", tt.expected, got)
+			}
+		})
+	}
+}
+
+func TestFindCheckNodeLine_EdgeCases(t *testing.T) {
+	// Test FindCheckNodeLine with edge cases
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "vibeguard.yaml")
+
+	content := `
+version: "1"
+checks:
+  - id: first
+    run: echo first
+  - id: second
+    run: echo second
+`
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	tests := []struct {
+		name          string
+		checkID       string
+		checkIndex    int
+		expectNonZero bool
+	}{
+		{"valid first check", "first", 0, true},
+		{"valid second check", "second", 1, true},
+		{"index out of range", "first", 10, false}, // Should return 0
+		{"negative index", "first", -1, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lineNum := cfg.FindCheckNodeLine(tt.checkID, tt.checkIndex)
+			if tt.expectNonZero && lineNum == 0 {
+				t.Errorf("expected non-zero line number, got 0")
+			}
+			if !tt.expectNonZero && lineNum != 0 {
+				t.Errorf("expected zero line number, got %d", lineNum)
+			}
+		})
+	}
+}
