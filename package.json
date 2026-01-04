@@ -1,0 +1,21 @@
+{
+  "name": "vibeguard",
+  "version": "0.1.0",
+  "description": "Fast and flexible policy enforcement engine for CI/CD pipelines",
+  "private": true,
+  "scripts": {
+    "release": "standard-version",
+    "release:major": "standard-version --release-as major",
+    "release:minor": "standard-version --release-as minor",
+    "release:patch": "standard-version --release-as patch"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^18.6.1",
+    "@commitlint/config-conventional": "^18.6.2",
+    "conventional-changelog-cli": "^4.1.0",
+    "standard-version": "^9.5.0"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

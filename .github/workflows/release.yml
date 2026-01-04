@@ -1,0 +1,110 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    if: "!contains(github.event.head_commit.message, 'chore(release):')"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Set git user
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+
+      - name: Create release
+        run: npm run release
+
+      - name: Push tags
+        run: |
+          git push --follow-tags origin main
+
+      - name: Build release binaries
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Build binaries
+        run: |
+          mkdir -p bin
+          GOOS=linux GOARCH=amd64 go build -o bin/vibeguard-linux-amd64 ./cmd/vibeguard
+          GOOS=darwin GOARCH=amd64 go build -o bin/vibeguard-darwin-amd64 ./cmd/vibeguard
+          GOOS=darwin GOARCH=arm64 go build -o bin/vibeguard-darwin-arm64 ./cmd/vibeguard
+          GOOS=windows GOARCH=amd64 go build -o bin/vibeguard-windows-amd64.exe ./cmd/vibeguard
+
+      - name: Get latest tag
+        id: tag
+        run: |
+          TAG=$(git describe --tags --abbrev=0)
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          release_name: ${{ steps.tag.outputs.tag }}
+          body_path: CHANGELOG.md
+          draft: false
+          prerelease: false
+
+      - name: Upload Linux binary
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./bin/vibeguard-linux-amd64
+          asset_name: vibeguard-linux-amd64
+          asset_content_type: application/octet-stream
+
+      - name: Upload macOS x86_64 binary
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./bin/vibeguard-darwin-amd64
+          asset_name: vibeguard-darwin-amd64
+          asset_content_type: application/octet-stream
+
+      - name: Upload macOS ARM64 binary
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./bin/vibeguard-darwin-arm64
+          asset_name: vibeguard-darwin-arm64
+          asset_content_type: application/octet-stream
+
+      - name: Upload Windows binary
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./bin/vibeguard-windows-amd64.exe
+          asset_name: vibeguard-windows-amd64.exe
+          asset_content_type: application/octet-stream

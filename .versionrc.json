@@ -1,0 +1,55 @@
+{
+  "types": [
+    {
+      "type": "feat",
+      "section": "Features",
+      "hidden": false
+    },
+    {
+      "type": "fix",
+      "section": "Bug Fixes",
+      "hidden": false
+    },
+    {
+      "type": "perf",
+      "section": "Performance",
+      "hidden": false
+    },
+    {
+      "type": "docs",
+      "section": "Documentation",
+      "hidden": false
+    },
+    {
+      "type": "test",
+      "section": "Testing",
+      "hidden": false
+    },
+    {
+      "type": "ci",
+      "section": "CI/CD",
+      "hidden": false
+    },
+    {
+      "type": "refactor",
+      "section": "Code Refactoring",
+      "hidden": false
+    },
+    {
+      "type": "style",
+      "section": "Code Style",
+      "hidden": true
+    },
+    {
+      "type": "chore",
+      "section": "Chores",
+      "hidden": true
+    }
+  ],
+  "commitUrlFormat": "https://github.com/vibeguard/vibeguard/commit/{{hash}}",
+  "compareUrlFormat": "https://github.com/vibeguard/vibeguard/compare/{{previousTag}}...{{currentTag}}",
+  "issueUrlFormat": "https://github.com/vibeguard/vibeguard/issues/{{id}}",
+  "userUrlFormat": "https://github.com/{{user}}",
+  "releaseCommitMessageFormat": "chore(release): v{{currentTag}}",
+  "issuePrefixes": ["#"]
+}
