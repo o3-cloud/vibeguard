@@ -50,32 +50,47 @@ type Violation struct {
 
 // Orchestrator coordinates check execution.
 type Orchestrator struct {
-	executor    *executor.Executor
-	config      *config.Config
-	maxParallel int
-	failFast    bool
-	verbose     bool
-	logDir      string // Directory for check output logs
+	executor      *executor.Executor
+	config        *config.Config
+	maxParallel   int
+	failFast      bool
+	verbose       bool
+	logDir        string // Directory for check output logs
+	errorExitCode int    // Configurable exit code for failures (default: 1)
 }
 
 // DefaultLogDir is the default directory for check output logs.
 const DefaultLogDir = ".vibeguard/log"
 
+// Option is a functional option for configuring an Orchestrator.
+type Option func(*Orchestrator)
+
+// WithErrorExitCode sets the exit code to use for failures (FAIL and TIMEOUT).
+func WithErrorExitCode(code int) Option {
+	return func(o *Orchestrator) {
+		o.errorExitCode = code
+	}
+}
+
 // New creates a new Orchestrator.
-func New(cfg *config.Config, exec *executor.Executor, maxParallel int, failFast, verbose bool, logDir string) *Orchestrator {
+func New(cfg *config.Config, exec *executor.Executor, maxParallel int, failFast, verbose bool, logDir string, errorExitCode int) *Orchestrator {
 	if maxParallel <= 0 {
 		maxParallel = config.DefaultParallel
 	}
 	if logDir == "" {
 		logDir = DefaultLogDir
 	}
+	if errorExitCode <= 0 {
+		errorExitCode = 1
+	}
 	return &Orchestrator{
-		executor:    exec,
-		config:      cfg,
-		maxParallel: maxParallel,
-		failFast:    failFast,
-		verbose:     verbose,
-		logDir:      logDir,
+		executor:      exec,
+		config:        cfg,
+		maxParallel:   maxParallel,
+		failFast:      failFast,
+		verbose:       verbose,
+		logDir:        logDir,
+		errorExitCode: errorExitCode,
 	}
 }
 
@@ -370,8 +385,7 @@ func (o *Orchestrator) Run(ctx context.Context) (*RunResult, error) {
 }
 
 // calculateExitCode determines the exit code based on violations.
-// Exit codes: 0 = success, 2 = violation, 4 = timeout
-// Uses exit code 2 for violations (not 1) for Claude Code hook compatibility.
+// Exit codes: 0 = success, errorExitCode = failure (both FAIL and TIMEOUT)
 func (o *Orchestrator) calculateExitCode(violations []*Violation) int {
 	hasTimeout := false
 	hasError := false
@@ -385,12 +399,9 @@ func (o *Orchestrator) calculateExitCode(violations []*Violation) int {
 		}
 	}
 
-	// Timeout takes precedence over error severity
-	if hasTimeout {
-		return executor.ExitCodeTimeout
-	}
-	if hasError {
-		return executor.ExitCodeViolation
+	// Both timeout and error use the same configurable exit code
+	if hasTimeout || hasError {
+		return o.errorExitCode
 	}
 	return executor.ExitCodeSuccess
 }
@@ -519,10 +530,8 @@ func (o *Orchestrator) RunCheck(ctx context.Context, checkID string) (*RunResult
 			LogFile:    filepath.Join(o.logDir, check.ID+".log"),
 		}
 		violations = append(violations, violation)
-		if execResult.Timedout {
-			exitCode = executor.ExitCodeTimeout
-		} else if check.Severity == config.SeverityError {
-			exitCode = executor.ExitCodeViolation
+		if execResult.Timedout || check.Severity == config.SeverityError {
+			exitCode = o.errorExitCode
 		}
 	}
 

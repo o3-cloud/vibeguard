@@ -147,9 +147,9 @@ checks:
 	if !ok {
 		t.Fatalf("expected ExitError, got %T: %v", err, err)
 	}
-	// Exit code 3 is ExitCodeViolation for error-severity check failures
-	if exitErr.Code != 3 {
-		t.Errorf("expected exit code 3 (violation), got %d", exitErr.Code)
+	// Default error exit code is 1
+	if exitErr.Code != 1 {
+		t.Errorf("expected exit code 1 (default error code), got %d", exitErr.Code)
 	}
 }
 

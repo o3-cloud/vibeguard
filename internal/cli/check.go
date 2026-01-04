@@ -52,7 +52,7 @@ func runCheck(cmd *cobra.Command, args []string) error {
 
 	// Create executor and orchestrator
 	exec := executor.New("")
-	orch := orchestrator.New(cfg, exec, parallel, failFast, verbose, logDir)
+	orch := orchestrator.New(cfg, exec, parallel, failFast, verbose, logDir, GetErrorExitCode())
 
 	// Create formatter - use stderr for Claude Code hook visibility
 	formatter := output.New(os.Stderr, verbose)

@@ -44,7 +44,7 @@ func main() {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, false, false, "")
+	orch := New(cfg, exec, 1, false, false, "", 1)
 
 	result, err := orch.Run(context.Background())
 	if err != nil {
@@ -74,7 +74,7 @@ func TestIntegration_RealToolExecution_EchoCommand(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, false, false, "")
+	orch := New(cfg, exec, 1, false, false, "", 1)
 
 	result, err := orch.Run(context.Background())
 	if err != nil {
@@ -110,7 +110,7 @@ func TestIntegration_GrokExtraction_RealToolOutput(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, false, false, "")
+	orch := New(cfg, exec, 1, false, false, "", 1)
 
 	result, err := orch.Run(context.Background())
 	if err != nil {
@@ -145,7 +145,7 @@ func TestIntegration_GrokExtraction_MultiLineOutput(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, false, false, "")
+	orch := New(cfg, exec, 1, false, false, "", 1)
 
 	result, err := orch.Run(context.Background())
 	if err != nil {
@@ -181,7 +181,7 @@ func TestIntegration_GrokExtraction_InViolationSuggestion(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, false, false, "")
+	orch := New(cfg, exec, 1, false, false, "", 1)
 
 	result, err := orch.Run(context.Background())
 	if err != nil {
@@ -230,7 +230,7 @@ func TestIntegration_DependencyOrdering_RealTools(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, false, false, "")
+	orch := New(cfg, exec, 1, false, false, "", 1)
 
 	result, err := orch.Run(context.Background())
 	if err != nil {
@@ -273,7 +273,7 @@ func TestIntegration_DependencyOrdering_FailurePreventsDownstream(t *testing.T) 
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, false, false, "")
+	orch := New(cfg, exec, 1, false, false, "", 1)
 
 	result, err := orch.Run(context.Background())
 	if err != nil {
@@ -310,16 +310,16 @@ func TestIntegration_TimeoutHandling_CommandExceedsTimeout(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, false, false, "")
+	orch := New(cfg, exec, 1, false, false, "", 1)
 
 	result, err := orch.Run(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Timeout should result in exit code 4
-	if result.ExitCode != executor.ExitCodeTimeout {
-		t.Errorf("expected exit code %d for timeout, got %d", executor.ExitCodeTimeout, result.ExitCode)
+	// Timeout should result in exit code 1 (default error exit code)
+	if result.ExitCode != 1 {
+		t.Errorf("expected exit code 1 for timeout, got %d", result.ExitCode)
 	}
 
 	if len(result.Violations) != 1 {
@@ -346,7 +346,7 @@ func TestIntegration_TimeoutHandling_CommandCompletesBeforeTimeout(t *testing.T)
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, false, false, "")
+	orch := New(cfg, exec, 1, false, false, "", 1)
 
 	result, err := orch.Run(context.Background())
 	if err != nil {
@@ -395,7 +395,7 @@ func TestIntegration_ComplexWorkflow(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, false, false, "")
+	orch := New(cfg, exec, 1, false, false, "", 1)
 
 	result, err := orch.Run(context.Background())
 	if err != nil {

@@ -10,13 +10,14 @@ import (
 
 var (
 	// Flags
-	configFile  string
-	verbose     bool
-	jsonOutput  bool
-	parallel    int
-	failFast    bool
-	showVersion bool
-	logDir      string
+	configFile    string
+	verbose       bool
+	jsonOutput    bool
+	parallel      int
+	failFast      bool
+	showVersion   bool
+	logDir        string
+	errorExitCode int
 )
 
 // rootCmd is the base command for vibeguard
@@ -60,4 +61,10 @@ func init() {
 	rootCmd.PersistentFlags().IntVarP(&parallel, "parallel", "p", 4, "Max parallel checks")
 	rootCmd.PersistentFlags().BoolVar(&failFast, "fail-fast", false, "Stop on first failure")
 	rootCmd.PersistentFlags().StringVar(&logDir, "log-dir", "", "Directory for check output logs (default: .vibeguard/log)")
+	rootCmd.PersistentFlags().IntVar(&errorExitCode, "error-exit-code", 1, "Exit code for check failures and timeouts")
+}
+
+// GetErrorExitCode returns the configured error exit code
+func GetErrorExitCode() int {
+	return errorExitCode
 }
