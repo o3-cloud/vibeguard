@@ -376,3 +376,49 @@ checks:
 		t.Errorf("runCheck with warning severity should not fail: %v", err)
 	}
 }
+
+func TestRunCheck_JSONFormatError(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "vibeguard-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	configContent := `version: "1"
+checks:
+  - id: json-error-check
+    run: "true"
+    severity: error
+    timeout: 10s
+`
+	configPath := filepath.Join(tmpDir, "vibeguard.yaml")
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write config: %v", err)
+	}
+
+	oldConfig := configFile
+	oldJSON := jsonOutput
+	defer func() {
+		configFile = oldConfig
+		jsonOutput = oldJSON
+	}()
+
+	configFile = configPath
+	jsonOutput = true
+
+	// Close stderr to cause FormatJSON to fail
+	oldStderr := os.Stderr
+	defer func() { os.Stderr = oldStderr }()
+	os.Stderr = nil
+
+	err = runCheck(checkCmd, []string{})
+	if err == nil {
+		t.Fatal("expected error when JSON formatting fails")
+	}
+
+	// Verify it's an error related to the formatting, not the exit code
+	// The error should be returned when FormatJSON fails
+	if exitErr, ok := err.(*ExitError); ok {
+		t.Errorf("should not reach ExitError when JSON formatting fails, got exit code %d", exitErr.Code)
+	}
+}
