@@ -418,3 +418,160 @@ func TestMatch_UnicodeInput(t *testing.T) {
 		t.Errorf("expected greeting=Hello, got %q", result["greeting"])
 	}
 }
+
+func TestMatch_ComplexWorkflow_MultiPatternMerge(t *testing.T) {
+	// Integration test: Multiple patterns extracting different fields from complex output
+	input := `
+Starting test suite...
+Test results:
+  Total Tests: 150
+  Passed: 135
+  Failed: 15
+  Coverage: 79.2%
+Server running at 192.168.1.100:8080
+Duration: 2.5 seconds
+	`
+
+	patterns := []string{
+		"Total Tests: (?P<total>[0-9]+)",
+		"Passed: (?P<passed>[0-9]+)",
+		"Failed: (?P<failed>[0-9]+)",
+		"Coverage: (?P<coverage>[0-9.]+)%",
+		"(?P<ip>[0-9.]+):(?P<port>[0-9]+)",
+		"Duration: (?P<duration>[0-9.]+)",
+	}
+
+	m, err := New(patterns)
+	if err != nil {
+		t.Fatalf("New() returned error: %v", err)
+	}
+
+	result, err := m.Match(input)
+	if err != nil {
+		t.Fatalf("Match() returned error: %v", err)
+	}
+
+	tests := []struct {
+		key      string
+		expected string
+	}{
+		{"total", "150"},
+		{"passed", "135"},
+		{"failed", "15"},
+		{"coverage", "79.2"},
+		{"ip", "192.168.1.100"},
+		{"port", "8080"},
+		{"duration", "2.5"},
+	}
+
+	for _, tc := range tests {
+		if result[tc.key] != tc.expected {
+			t.Errorf("expected %s=%s, got %q", tc.key, tc.expected, result[tc.key])
+		}
+	}
+}
+
+func TestMatch_ComplexWorkflow_GoTestOutput(t *testing.T) {
+	// Integration test: Parsing real Go test output
+	input := `ok      github.com/vibeguard/vibeguard/internal/grok 0.123s  coverage: 79.2% of statements`
+
+	patterns := []string{
+		"github.com(?P<package>[a-z./]+)",
+		"(?P<duration>[0-9.]+)s",
+		"coverage: (?P<coverage>[0-9.]+)%",
+	}
+
+	m, err := New(patterns)
+	if err != nil {
+		t.Fatalf("New() returned error: %v", err)
+	}
+
+	result, err := m.Match(input)
+	if err != nil {
+		t.Fatalf("Match() returned error: %v", err)
+	}
+
+	if result["package"] != "/vibeguard/vibeguard/internal/grok" {
+		t.Errorf("expected package path, got %q", result["package"])
+	}
+	if result["duration"] != "0.123" {
+		t.Errorf("expected duration=0.123, got %q", result["duration"])
+	}
+	if result["coverage"] != "79.2" {
+		t.Errorf("expected coverage=79.2, got %q", result["coverage"])
+	}
+}
+
+func TestMatch_ComplexWorkflow_LogAggregation(t *testing.T) {
+	// Integration test: Aggregating data from multiple lines
+	logs := []string{
+		"[ERROR] Request from 10.0.0.1 failed with status 500",
+		"[WARN] Request from 10.0.0.2 timed out after 5000ms",
+		"[INFO] Request from 10.0.0.3 succeeded with status 200",
+	}
+
+	patterns := []string{
+		`\[(?P<level>\w+)\]`,
+		`(?P<ip>[0-9.]+)`,
+		"status (?P<status>[0-9]+)",
+	}
+
+	m, err := New(patterns)
+	if err != nil {
+		t.Fatalf("New() returned error: %v", err)
+	}
+
+	var results []map[string]string
+	for _, log := range logs {
+		result, err := m.Match(log)
+		if err != nil {
+			t.Fatalf("Match() returned error for %q: %v", log, err)
+		}
+		results = append(results, result)
+	}
+
+	if len(results) != 3 {
+		t.Fatalf("expected 3 results, got %d", len(results))
+	}
+
+	// Verify each log was parsed correctly
+	levels := []string{"ERROR", "WARN", "INFO"}
+	ips := []string{"10.0.0.1", "10.0.0.2", "10.0.0.3"}
+	statuses := []string{"500", "", "200"}
+
+	for i, result := range results {
+		if result["level"] != levels[i] {
+			t.Errorf("result %d: expected level=%s, got %q", i, levels[i], result["level"])
+		}
+		if result["ip"] != ips[i] {
+			t.Errorf("result %d: expected ip=%s, got %q", i, ips[i], result["ip"])
+		}
+		if statuses[i] != "" && result["status"] != statuses[i] {
+			t.Errorf("result %d: expected status=%s, got %q", i, statuses[i], result["status"])
+		}
+	}
+}
+
+func TestMatch_ComplexWorkflow_OverridingCaptures(t *testing.T) {
+	// Integration test: Later patterns overriding earlier captures
+	patterns := []string{
+		"version: (?P<version>[0-9.]+)",
+		"latest: (?P<version>[0-9.]+)",
+	}
+
+	m, err := New(patterns)
+	if err != nil {
+		t.Fatalf("New() returned error: %v", err)
+	}
+
+	input := "version: 1.0.0 latest: 2.0.0"
+	result, err := m.Match(input)
+	if err != nil {
+		t.Fatalf("Match() returned error: %v", err)
+	}
+
+	// Later pattern should override, so version should be 2.0.0
+	if result["version"] != "2.0.0" {
+		t.Errorf("expected version=2.0.0 (from latest pattern), got %q", result["version"])
+	}
+}

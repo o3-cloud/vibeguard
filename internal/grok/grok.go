@@ -66,13 +66,7 @@ func New(patterns []string) (*Matcher, error) {
 //   - All patterns are applied sequentially and independently to the input.
 //   - If multiple patterns capture the same field name, the later pattern's value overrides earlier ones.
 //   - If a pattern doesn't match, its fields are simply not included in the result (no error).
-//   - Unmatched patterns do not generate errors; only pattern compilation or parsing errors do.
-//
-// Error Handling:
-//   - Returns an error if any pattern fails to parse the input.
-//   - The error message includes the pattern index (0-based), the pattern string, and the first 100
-//     characters of the input (truncated for readability).
-//   - This helps users identify which pattern failed and debug pattern syntax issues.
+//   - Unmatched patterns do not generate errors; only pattern compilation errors do.
 //
 // Pattern Syntax Support:
 //   - Built-in patterns: %{NUMBER:name}, %{INT:name}, %{WORD:name}, %{IP:name}, %{IPV6:name}, %{UUID:name}, etc.
@@ -92,17 +86,8 @@ func (m *Matcher) Match(input string) (map[string]string, error) {
 		return result, nil
 	}
 
-	for i, g := range m.compiled {
-		values, err := g.ParseString(input)
-		if err != nil {
-			pattern := m.patterns[i]
-			// Truncate output for readability if too long
-			output := input
-			if len(output) > 100 {
-				output = output[:97] + "..."
-			}
-			return nil, fmt.Errorf("grok pattern %d failed to parse\n  pattern: %q\n  output: %q\n  error: %w", i, pattern, output, err)
-		}
+	for _, g := range m.compiled {
+		values, _ := g.ParseString(input)
 		// Merge extracted values into result
 		// Later patterns can override values from earlier patterns
 		for k, v := range values {
