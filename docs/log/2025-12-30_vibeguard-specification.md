@@ -221,6 +221,7 @@ vibeguard validate              Validate configuration
 | `--json` | Output in JSON format |
 | `--parallel`, `-p` | Max parallel checks (default: 4) |
 | `--fail-fast` | Stop on first failure |
+| `--error-exit-code` | Exit code for failures and timeouts (default: 1) |
 
 ### 4.3 Output Modes
 
@@ -244,7 +245,7 @@ FAIL  coverage (error)
       Tip: Coverage is 72%, need 80%.
 
 $ echo $?
-2
+1
 ```
 
 **Note:** All output is written to **stderr**, not stdout. This ensures output is visible to Claude Code PostToolUse hooks, which hide stdout by default.
@@ -279,7 +280,7 @@ $ vibeguard check --verbose
       "extracted": {"coverage": "72"}
     }
   ],
-  "exit_code": 2
+  "exit_code": 1
 }
 ```
 
@@ -288,13 +289,14 @@ $ vibeguard check --verbose
 | Code | Meaning |
 |------|---------|
 | 0 | All checks passed, or only warning-severity violations |
-| 2 | One or more error-severity violations |
-| 3 | Configuration error |
-| 4 | Check execution error (timeout, command not found) |
+| 1 | One or more error-severity violations, or timeout (default, configurable via `--error-exit-code`) |
+| 2 | Configuration error |
 
 **Note:** Warning-severity violations are reported in output but do not cause a non-zero exit code. This allows CI pipelines to surface warnings without blocking merges.
 
-**Claude Code Hook Compatibility:** Exit code 2 is used for violations (rather than 1) because Claude Code hooks treat exit codes 0 and 1 as non-blocking, while exit codes ≥2 block the tool call. This ensures VibeGuard policy violations prevent commits when used as a git pre-commit hook.
+**Configurable Exit Code:** The `--error-exit-code` flag allows customizing the exit code used for check failures and timeouts. The default is 1, but this can be changed for CI/CD integration needs (e.g., `--error-exit-code=3` for legacy compatibility).
+
+**Claude Code Hook Compatibility:** When using VibeGuard as a Claude Code hook where exit codes ≥2 block the tool call, use `--error-exit-code=2` to ensure policy violations prevent commits.
 
 ---
 
@@ -478,8 +480,8 @@ vibeguard/
 ┌─────────────────────────────────────────────────────────────┐
 │ 6. Exit                                                     │
 │    - Code 0: all passed                                     │
-│    - Code 2: violations                                     │
-│    - Code 3/4: errors                                       │
+│    - Code 1: violations/timeout (configurable)              │
+│    - Code 2: config errors                                  │
 └─────────────────────────────────────────────────────────────┘
 ```
 

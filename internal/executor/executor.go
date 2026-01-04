@@ -15,8 +15,16 @@ import (
 const (
 	ExitCodeSuccess     = 0 // All checks passed
 	ExitCodeConfigError = 2 // Configuration error (config-time errors)
-	ExitCodeViolation   = 3 // One or more error-severity violations (execution errors)
-	ExitCodeTimeout     = 4 // Check execution error (timeout, command not found)
+
+	// Deprecated: ExitCodeViolation is no longer the default exit code for violations.
+	// The error exit code is now configurable via --error-exit-code flag (default: 1).
+	// This constant is kept for backwards compatibility in tests and internal use.
+	ExitCodeViolation = 3
+
+	// Deprecated: ExitCodeTimeout is no longer the default exit code for timeouts.
+	// Timeouts now use the same configurable exit code as violations via --error-exit-code.
+	// This constant is kept for backwards compatibility in tests and internal use.
+	ExitCodeTimeout = 4
 )
 
 // Result contains the execution result of a check command.

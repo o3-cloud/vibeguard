@@ -29,7 +29,7 @@ The JSON output is a single object with the following top-level structure:
 |-------|------|-------------|
 | `checks` | array | Array of check execution results |
 | `violations` | array | Array of policy violations detected |
-| `exit_code` | integer | Exit code indicating overall result (0=success, 2=config error, 3=violation, 4=timeout) |
+| `exit_code` | integer | Exit code indicating overall result (0=success, 1=failure/timeout by default, 2=config error) |
 | `fail_fast_triggered` | boolean | Whether execution stopped early due to `--fail-fast` flag (omitted if false) |
 
 ## Check Object
@@ -165,7 +165,7 @@ Would produce:
       }
     }
   ],
-  "exit_code": 3
+  "exit_code": 1
 }
 ```
 
@@ -186,7 +186,7 @@ Would produce:
     }
   ],
   "violations": [],
-  "exit_code": 4,
+  "exit_code": 1,
   "fail_fast_triggered": true
 }
 ```
@@ -216,7 +216,7 @@ A single check can produce multiple violations if grok patterns extract multiple
       }
     }
   ],
-  "exit_code": 3
+  "exit_code": 1
 }
 ```
 
@@ -227,9 +227,19 @@ The `exit_code` field corresponds to VibeGuard's exit codes:
 | Value | Name | Description |
 |-------|------|-------------|
 | 0 | Success | All checks passed, no violations |
+| 1 | Error (default) | One or more violations detected, or timeout (configurable via `--error-exit-code`) |
 | 2 | ConfigError | Configuration parsing or validation failed |
-| 3 | Violation | One or more violations detected (error severity) |
-| 4 | Timeout | Check execution timeout or system error |
+
+### Configurable Error Exit Code
+
+By default, VibeGuard uses exit code 1 for both check failures (error-severity violations) and timeouts. This can be customized using the `--error-exit-code` flag:
+
+```bash
+# Use exit code 3 for failures (matches legacy behavior)
+vibeguard check --error-exit-code=3
+```
+
+**Note:** Exit codes 3 and 4 were previously used to distinguish violations from timeouts. This behavior is now deprecated in favor of a unified configurable exit code. The JSON output's `checks` array still indicates whether a check timed out via its status field.
 
 ## Using JSON Output Programmatically
 

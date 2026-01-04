@@ -66,7 +66,7 @@ func TestFormatter_QuietMode_WithViolations(t *testing.T) {
 				Suggestion: "Coverage is 72%, need 80%.",
 			},
 		},
-		ExitCode: executor.ExitCodeViolation,
+		ExitCode: executor.ExitCodeViolation, //nolint:staticcheck // Testing legacy exit code behavior
 	}
 
 	f.FormatResult(result)
@@ -153,7 +153,7 @@ func TestFormatter_VerboseMode_WithFailure(t *testing.T) {
 				Suggestion: "Coverage is 72%, need 80%",
 			},
 		},
-		ExitCode: executor.ExitCodeViolation,
+		ExitCode: executor.ExitCodeViolation, //nolint:staticcheck // Testing legacy exit code behavior
 	}
 
 	f.FormatResult(result)
@@ -239,7 +239,7 @@ func TestFormatter_VerboseMode_FailFastTriggered(t *testing.T) {
 			},
 		},
 		FailFastTriggered: true,
-		ExitCode:          executor.ExitCodeViolation,
+		ExitCode:          executor.ExitCodeViolation, //nolint:staticcheck // Testing legacy exit code behavior
 	}
 
 	f.FormatResult(result)
@@ -313,7 +313,7 @@ func TestFormatter_QuietMode_FailFastTriggered(t *testing.T) {
 			},
 		},
 		FailFastTriggered: true,
-		ExitCode:          executor.ExitCodeViolation,
+		ExitCode:          executor.ExitCodeViolation, //nolint:staticcheck // Testing legacy exit code behavior
 	}
 
 	f.FormatResult(result)
