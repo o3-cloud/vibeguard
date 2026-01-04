@@ -153,6 +153,11 @@ func (f *Formatter) formatViolation(v *orchestrator.Violation) {
 		_, _ = fmt.Fprintf(f.out, "  Fix: %s\n", v.Command)
 	}
 
+	// Show log file location if present
+	if v.LogFile != "" {
+		_, _ = fmt.Fprintf(f.out, "  Log: %s\n", v.LogFile)
+	}
+
 	// Show advisory line
 	advisory := "blocks commit"
 	if v.Severity == config.SeverityWarning {

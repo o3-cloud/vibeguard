@@ -15,21 +15,21 @@ checks:
     run: test -z "$(gofmt -l .)"
     severity: error
     suggestion: "Code is not properly formatted"
-    fix: "gofmt -w ."
+    fix: "Fix the formatting issues"
     timeout: 5s
 
   - id: lint
     run: golangci-lint run {{.go_packages}}
     severity: error
     suggestion: "golangci-lint found lint issues"
-    fix: "golangci-lint run ./..."
+    fix: "Fix the linter issues"
     timeout: 5s
 
   - id: test
     run: go test {{.go_packages}}
     severity: warning
     suggestion: "Some tests are failing"
-    fix: "go test ./..."
+    fix: "Fix the failing tests"
     timeout: 20s
 
   - id: test-coverage
@@ -45,7 +45,7 @@ checks:
     run: go build -o vibeguard ./cmd/vibeguard
     severity: error
     suggestion: "Build failed with compilation errors"
-    fix: "go build -o vibeguard ./cmd/vibeguard"
+    fix: "Fix the build errors"
     timeout: 5s
     requires:
       - vet

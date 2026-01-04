@@ -30,6 +30,7 @@ type JSONViolation struct {
 	Suggestion string            `json:"suggestion,omitempty"`
 	Fix        string            `json:"fix,omitempty"`
 	Extracted  map[string]string `json:"extracted,omitempty"`
+	LogFile    string            `json:"log_file,omitempty"`
 }
 
 // FormatJSON outputs the result in JSON format.
@@ -63,6 +64,7 @@ func FormatJSON(out io.Writer, result *orchestrator.RunResult) error {
 			Suggestion: v.Suggestion,
 			Fix:        v.Fix,
 			Extracted:  v.Extracted,
+			LogFile:    v.LogFile,
 		})
 	}
 

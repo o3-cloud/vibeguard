@@ -25,7 +25,7 @@ func TestRun_PassingCheck_ExitCodeZero(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, false, false)
+	orch := New(cfg, exec, 1, false, false, "")
 
 	result, err := orch.Run(context.Background())
 	if err != nil {
@@ -60,7 +60,7 @@ func TestRun_FailingCheck_ErrorSeverity_ExitCodeThree(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, false, false)
+	orch := New(cfg, exec, 1, false, false, "")
 
 	result, err := orch.Run(context.Background())
 	if err != nil {
@@ -96,7 +96,7 @@ func TestRun_FailingCheck_WarningSeverity_ExitCodeZero(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, false, false)
+	orch := New(cfg, exec, 1, false, false, "")
 
 	result, err := orch.Run(context.Background())
 	if err != nil {
@@ -138,7 +138,7 @@ func TestRun_MultipleChecks_MixedResults(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, false, false)
+	orch := New(cfg, exec, 1, false, false, "")
 
 	result, err := orch.Run(context.Background())
 	if err != nil {
@@ -180,7 +180,7 @@ func TestRun_MultipleChecks_ErrorFailure_ExitCodeThree(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, false, false)
+	orch := New(cfg, exec, 1, false, false, "")
 
 	result, err := orch.Run(context.Background())
 	if err != nil {
@@ -220,7 +220,7 @@ func TestRun_FailFast_StopsOnFirstFailure(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, true, false) // failFast = true
+	orch := New(cfg, exec, 1, true, false, "") // failFast = true
 
 	result, err := orch.Run(context.Background())
 	if err != nil {
@@ -251,7 +251,7 @@ func TestRunCheck_SingleCheck_Passes(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, false, false)
+	orch := New(cfg, exec, 1, false, false, "")
 
 	result, err := orch.RunCheck(context.Background(), "my-check")
 	if err != nil {
@@ -283,7 +283,7 @@ func TestRunCheck_SingleCheck_Fails(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, false, false)
+	orch := New(cfg, exec, 1, false, false, "")
 
 	result, err := orch.RunCheck(context.Background(), "my-check")
 	if err != nil {
@@ -317,7 +317,7 @@ func TestRunCheck_UnknownCheck_ReturnsConfigError(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, false, false)
+	orch := New(cfg, exec, 1, false, false, "")
 
 	result, err := orch.RunCheck(context.Background(), "non-existent-check")
 	if err == nil {
@@ -348,7 +348,7 @@ func TestRunCheck_WarningSeverity_FailsButExitZero(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, false, false)
+	orch := New(cfg, exec, 1, false, false, "")
 
 	result, err := orch.RunCheck(context.Background(), "warn-check")
 	if err != nil {
@@ -378,7 +378,7 @@ func TestViolation_ContainsCorrectInfo(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, false, false)
+	orch := New(cfg, exec, 1, false, false, "")
 
 	result, err := orch.Run(context.Background())
 	if err != nil {
@@ -408,12 +408,12 @@ func TestNew_DefaultMaxParallel(t *testing.T) {
 	cfg := &config.Config{Version: "1"}
 	exec := executor.New("")
 
-	orch := New(cfg, exec, 0, false, false)
+	orch := New(cfg, exec, 0, false, false, "")
 	if orch.maxParallel != config.DefaultParallel {
 		t.Errorf("expected default max parallel %d, got %d", config.DefaultParallel, orch.maxParallel)
 	}
 
-	orch = New(cfg, exec, -1, false, false)
+	orch = New(cfg, exec, -1, false, false, "")
 	if orch.maxParallel != config.DefaultParallel {
 		t.Errorf("expected default max parallel %d, got %d", config.DefaultParallel, orch.maxParallel)
 	}
@@ -447,7 +447,7 @@ func TestRun_WithDependencies_ExecutesInOrder(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, false, false)
+	orch := New(cfg, exec, 1, false, false, "")
 
 	result, err := orch.Run(context.Background())
 	if err != nil {
@@ -507,7 +507,7 @@ func TestRun_DiamondDependency_ExecutesInCorrectOrder(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, false, false)
+	orch := New(cfg, exec, 1, false, false, "")
 
 	result, err := orch.Run(context.Background())
 	if err != nil {
@@ -562,7 +562,7 @@ func TestRun_DependencyFails_SkipsDependent(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, false, false) // failFast = false
+	orch := New(cfg, exec, 1, false, false, "") // failFast = false
 
 	result, err := orch.Run(context.Background())
 	if err != nil {
@@ -621,7 +621,7 @@ func TestRun_MultipleDependenciesOneFails_SkipsDependent(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, false, false)
+	orch := New(cfg, exec, 1, false, false, "")
 
 	result, err := orch.Run(context.Background())
 	if err != nil {
@@ -677,7 +677,7 @@ func TestRun_IndependentChecks_AllExecute(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, false, false)
+	orch := New(cfg, exec, 1, false, false, "")
 
 	result, err := orch.Run(context.Background())
 	if err != nil {
@@ -716,7 +716,7 @@ func TestRun_CyclicDependency_ReturnsError(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, false, false)
+	orch := New(cfg, exec, 1, false, false, "")
 
 	_, err := orch.Run(context.Background())
 	if err == nil {
@@ -738,7 +738,7 @@ func TestRun_UnknownDependency_ReturnsError(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, false, false)
+	orch := New(cfg, exec, 1, false, false, "")
 
 	_, err := orch.Run(context.Background())
 	if err == nil {
@@ -770,7 +770,7 @@ func TestRun_FailFast_WithDependencies_StopsCorrectly(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, true, false) // failFast = true
+	orch := New(cfg, exec, 1, true, false, "") // failFast = true
 
 	result, err := orch.Run(context.Background())
 	if err != nil {
@@ -813,7 +813,7 @@ func TestRun_ComplexDependencyGraph_CorrectOrder(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, false, false)
+	orch := New(cfg, exec, 1, false, false, "")
 
 	result, err := orch.Run(context.Background())
 	if err != nil {
@@ -862,7 +862,7 @@ func TestRun_DependencyChain_MiddleFails_SkipsDownstream(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, false, false)
+	orch := New(cfg, exec, 1, false, false, "")
 
 	result, err := orch.Run(context.Background())
 	if err != nil {
@@ -903,7 +903,7 @@ func TestRun_ParallelExecution_SameLevelRunsConcurrently(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 4, false, false) // maxParallel = 4
+	orch := New(cfg, exec, 4, false, false, "") // maxParallel = 4
 
 	result, err := orch.Run(context.Background())
 	if err != nil {
@@ -937,7 +937,7 @@ func TestRun_ParallelExecution_RespectsMaxParallel(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 2, false, false) // maxParallel = 2
+	orch := New(cfg, exec, 2, false, false, "") // maxParallel = 2
 
 	result, err := orch.Run(context.Background())
 	if err != nil {
@@ -973,7 +973,7 @@ func TestRun_ParallelExecution_LevelsRunSequentially(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 4, false, false)
+	orch := New(cfg, exec, 4, false, false, "")
 
 	result, err := orch.Run(context.Background())
 	if err != nil {
@@ -1004,7 +1004,7 @@ func TestRun_ParallelExecution_FailFastWithinLevel(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 4, true, false) // failFast = true
+	orch := New(cfg, exec, 4, true, false, "") // failFast = true
 
 	result, err := orch.Run(context.Background())
 	if err != nil {
@@ -1038,7 +1038,7 @@ func TestRun_ParallelExecution_AllFailuresRecorded(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 4, false, false) // failFast = false
+	orch := New(cfg, exec, 4, false, false, "") // failFast = false
 
 	result, err := orch.Run(context.Background())
 	if err != nil {
@@ -1072,7 +1072,7 @@ func TestRun_ParallelExecution_OrderPreservedWithinLevel(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 4, false, false)
+	orch := New(cfg, exec, 4, false, false, "")
 
 	result, err := orch.Run(context.Background())
 	if err != nil {
@@ -1108,7 +1108,7 @@ func TestRun_Timeout_ExitCode3(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, false, false)
+	orch := New(cfg, exec, 1, false, false, "")
 
 	result, err := orch.Run(context.Background())
 	if err != nil {
@@ -1135,7 +1135,7 @@ func TestRun_Timeout_ViolationMarkedAsTimeout(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, false, false)
+	orch := New(cfg, exec, 1, false, false, "")
 
 	result, err := orch.Run(context.Background())
 	if err != nil {
@@ -1166,7 +1166,7 @@ func TestRun_Timeout_SuggestionIncludesTimeoutMessage(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, false, false)
+	orch := New(cfg, exec, 1, false, false, "")
 
 	result, err := orch.Run(context.Background())
 	if err != nil {
@@ -1205,7 +1205,7 @@ func TestRun_TimeoutTakesPrecedenceOverError(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 4, false, false) // Run in parallel
+	orch := New(cfg, exec, 4, false, false, "") // Run in parallel
 
 	result, err := orch.Run(context.Background())
 	if err != nil {
@@ -1232,7 +1232,7 @@ func TestRunCheck_Timeout_ExitCode3(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, false, false)
+	orch := New(cfg, exec, 1, false, false, "")
 
 	result, err := orch.RunCheck(context.Background(), "timeout-check")
 	if err != nil {
@@ -1259,7 +1259,7 @@ func TestRunCheck_Timeout_ViolationMarkedAsTimeout(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, false, false)
+	orch := New(cfg, exec, 1, false, false, "")
 
 	result, err := orch.RunCheck(context.Background(), "timeout-check")
 	if err != nil {
@@ -1296,7 +1296,7 @@ func TestRun_FailFast_SetsFailFastTriggeredFlag(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, true, false) // failFast = true
+	orch := New(cfg, exec, 1, true, false, "") // failFast = true
 
 	result, err := orch.Run(context.Background())
 	if err != nil {
@@ -1321,7 +1321,7 @@ func TestRun_NoFailFast_FailFastTriggeredFalse(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, false, false) // failFast = false
+	orch := New(cfg, exec, 1, false, false, "") // failFast = false
 
 	result, err := orch.Run(context.Background())
 	if err != nil {
@@ -1352,7 +1352,7 @@ func TestRun_FailFast_WarningSeverityDoesNotTrigger(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, true, false) // failFast = true
+	orch := New(cfg, exec, 1, true, false, "") // failFast = true
 
 	result, err := orch.Run(context.Background())
 	if err != nil {
@@ -1384,7 +1384,7 @@ func TestRun_FailFast_CancelsLongRunningChecks(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 4, true, false) // failFast = true, parallel
+	orch := New(cfg, exec, 4, true, false, "") // failFast = true, parallel
 
 	start := time.Now()
 	result, err := orch.Run(context.Background())
@@ -1414,7 +1414,7 @@ func TestRun_FailFast_AllChecksPassDoesNotTrigger(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 4, true, false) // failFast = true
+	orch := New(cfg, exec, 4, true, false, "") // failFast = true
 
 	result, err := orch.Run(context.Background())
 	if err != nil {
@@ -1442,7 +1442,7 @@ func TestRun_GrokExtractsValues(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, false, false)
+	orch := New(cfg, exec, 1, false, false, "")
 
 	result, err := orch.Run(context.Background())
 	if err != nil {
@@ -1477,7 +1477,7 @@ func TestRun_GrokMultiplePatterns(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, false, false)
+	orch := New(cfg, exec, 1, false, false, "")
 
 	result, err := orch.Run(context.Background())
 	if err != nil {
@@ -1510,7 +1510,7 @@ func TestRun_GrokNoPatterns_EmptyExtracted(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, false, false)
+	orch := New(cfg, exec, 1, false, false, "")
 
 	result, err := orch.Run(context.Background())
 	if err != nil {
@@ -1541,7 +1541,7 @@ func TestRun_GrokNoMatch_EmptyValues(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, false, false)
+	orch := New(cfg, exec, 1, false, false, "")
 
 	result, err := orch.Run(context.Background())
 	if err != nil {
@@ -1572,7 +1572,7 @@ func TestRun_GrokInvalidPattern_ReturnsError(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, false, false)
+	orch := New(cfg, exec, 1, false, false, "")
 
 	_, err := orch.Run(context.Background())
 	if err == nil {
@@ -1594,7 +1594,7 @@ func TestRunCheck_GrokExtractsValues(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, false, false)
+	orch := New(cfg, exec, 1, false, false, "")
 
 	result, err := orch.RunCheck(context.Background(), "single-coverage")
 	if err != nil {
@@ -1625,7 +1625,7 @@ func TestRun_GrokExtractedInViolation(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, false, false)
+	orch := New(cfg, exec, 1, false, false, "")
 
 	result, err := orch.Run(context.Background())
 	if err != nil {
@@ -1667,7 +1667,7 @@ func TestRun_FileField_ReadsFromFile(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, false, false)
+	orch := New(cfg, exec, 1, false, false, "")
 
 	result, err := orch.Run(context.Background())
 	if err != nil {
@@ -1702,7 +1702,7 @@ func TestRun_FileField_MissingFile_ReturnsError(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, false, false)
+	orch := New(cfg, exec, 1, false, false, "")
 
 	_, err := orch.Run(context.Background())
 	if err == nil {
@@ -1738,7 +1738,7 @@ func TestRun_FileField_WithAssertion(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, false, false)
+	orch := New(cfg, exec, 1, false, false, "")
 
 	result, err := orch.Run(context.Background())
 	if err != nil {
@@ -1778,7 +1778,7 @@ func TestRun_FileField_WithAssertion_Fails(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, false, false)
+	orch := New(cfg, exec, 1, false, false, "")
 
 	result, err := orch.Run(context.Background())
 	if err != nil {
@@ -1821,7 +1821,7 @@ func TestRunCheck_FileField_ReadsFromFile(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, false, false)
+	orch := New(cfg, exec, 1, false, false, "")
 
 	result, err := orch.RunCheck(context.Background(), "version-check")
 	if err != nil {
@@ -1862,7 +1862,7 @@ func TestRun_FileField_WithVariableInterpolation(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, false, false)
+	orch := New(cfg, exec, 1, false, false, "")
 
 	result, err := orch.Run(context.Background())
 	if err != nil {
@@ -1899,7 +1899,7 @@ func TestRun_FileField_WithoutGrok_StillReads(t *testing.T) {
 	}
 
 	exec := executor.New("")
-	orch := New(cfg, exec, 1, false, false)
+	orch := New(cfg, exec, 1, false, false, "")
 
 	result, err := orch.Run(context.Background())
 	if err != nil {

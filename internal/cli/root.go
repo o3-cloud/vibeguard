@@ -16,6 +16,7 @@ var (
 	parallel    int
 	failFast    bool
 	showVersion bool
+	logDir      string
 )
 
 // rootCmd is the base command for vibeguard
@@ -58,4 +59,5 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
 	rootCmd.PersistentFlags().IntVarP(&parallel, "parallel", "p", 4, "Max parallel checks")
 	rootCmd.PersistentFlags().BoolVar(&failFast, "fail-fast", false, "Stop on first failure")
+	rootCmd.PersistentFlags().StringVar(&logDir, "log-dir", "", "Directory for check output logs (default: .vibeguard/log)")
 }

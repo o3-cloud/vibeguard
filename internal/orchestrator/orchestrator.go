@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -44,6 +45,7 @@ type Violation struct {
 	Fix        string
 	Extracted  map[string]string
 	Timedout   bool
+	LogFile    string // Path to log file containing check output
 }
 
 // Orchestrator coordinates check execution.
@@ -53,12 +55,19 @@ type Orchestrator struct {
 	maxParallel int
 	failFast    bool
 	verbose     bool
+	logDir      string // Directory for check output logs
 }
 
+// DefaultLogDir is the default directory for check output logs.
+const DefaultLogDir = ".vibeguard/log"
+
 // New creates a new Orchestrator.
-func New(cfg *config.Config, exec *executor.Executor, maxParallel int, failFast, verbose bool) *Orchestrator {
+func New(cfg *config.Config, exec *executor.Executor, maxParallel int, failFast, verbose bool, logDir string) *Orchestrator {
 	if maxParallel <= 0 {
 		maxParallel = config.DefaultParallel
+	}
+	if logDir == "" {
+		logDir = DefaultLogDir
 	}
 	return &Orchestrator{
 		executor:    exec,
@@ -66,6 +75,7 @@ func New(cfg *config.Config, exec *executor.Executor, maxParallel int, failFast,
 		maxParallel: maxParallel,
 		failFast:    failFast,
 		verbose:     verbose,
+		logDir:      logDir,
 	}
 }
 
@@ -222,6 +232,9 @@ func (o *Orchestrator) Run(ctx context.Context) (*RunResult, error) {
 					return execErr
 				}
 
+				// Write check output to log file (best-effort, don't fail if this fails)
+				_ = o.writeCheckLog(check.ID, execResult.Combined)
+
 				// Get the content to analyze (either from file or command output)
 				analysisOutput, analysisErr := o.getAnalysisOutput(check, execResult)
 				if analysisErr != nil {
@@ -308,6 +321,7 @@ func (o *Orchestrator) Run(ctx context.Context) (*RunResult, error) {
 						Fix:        check.Fix,
 						Extracted:  result.Extracted,
 						Timedout:   execResult.Timedout,
+						LogFile:    filepath.Join(o.logDir, check.ID+".log"),
 					}
 					levelViolations = append(levelViolations, violation)
 
@@ -415,6 +429,9 @@ func (o *Orchestrator) RunCheck(ctx context.Context, checkID string) (*RunResult
 		return nil, err
 	}
 
+	// Write check output to log file (best-effort, don't fail if this fails)
+	_ = o.writeCheckLog(check.ID, execResult.Combined)
+
 	// Get the content to analyze (either from file or command output)
 	analysisOutput, analysisErr := o.getAnalysisOutput(check, execResult)
 	if analysisErr != nil {
@@ -499,6 +516,7 @@ func (o *Orchestrator) RunCheck(ctx context.Context, checkID string) (*RunResult
 			Fix:        check.Fix,
 			Extracted:  result.Extracted,
 			Timedout:   execResult.Timedout,
+			LogFile:    filepath.Join(o.logDir, check.ID+".log"),
 		}
 		violations = append(violations, violation)
 		if execResult.Timedout {
@@ -514,4 +532,14 @@ func (o *Orchestrator) RunCheck(ctx context.Context, checkID string) (*RunResult
 		Duration:   time.Since(start),
 		ExitCode:   exitCode,
 	}, nil
+}
+
+// writeCheckLog writes check output to <logDir>/<check-id>.log
+func (o *Orchestrator) writeCheckLog(checkID, output string) error {
+	if err := os.MkdirAll(o.logDir, 0755); err != nil {
+		return err
+	}
+
+	logPath := filepath.Join(o.logDir, checkID+".log")
+	return os.WriteFile(logPath, []byte(output), 0644)
 }

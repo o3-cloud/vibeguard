@@ -35,5 +35,7 @@ bin/
 *.tmp
 *.test
 
+# Vibeguard runtime logs
+.vibeguard/
 
 spikes
