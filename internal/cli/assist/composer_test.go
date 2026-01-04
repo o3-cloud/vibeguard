@@ -505,3 +505,94 @@ func TestPromptTokenEstimate(t *testing.T) {
 
 	t.Logf("Prompt length: %d chars, ~%d tokens", len(prompt), estimatedTokens)
 }
+
+func TestAssembleSections_EdgeCases(t *testing.T) {
+	testCases := []struct {
+		name     string
+		sections []PromptSection
+		expected string
+	}{
+		{
+			name:     "empty sections",
+			sections: []PromptSection{},
+			expected: "",
+		},
+		{
+			name: "single section",
+			sections: []PromptSection{
+				{Content: "Only content"},
+			},
+			expected: "Only content",
+		},
+		{
+			name: "two sections",
+			sections: []PromptSection{
+				{Content: "First"},
+				{Content: "Second"},
+			},
+			expected: "First\n\n---\n\nSecond",
+		},
+		{
+			name: "three sections",
+			sections: []PromptSection{
+				{Content: "First"},
+				{Content: "Second"},
+				{Content: "Third"},
+			},
+			expected: "First\n\n---\n\nSecond\n\n---\n\nThird",
+		},
+		{
+			name: "single character sections",
+			sections: []PromptSection{
+				{Content: "A"},
+				{Content: "B"},
+			},
+			expected: "A\n\n---\n\nB",
+		},
+		{
+			name: "sections with special characters",
+			sections: []PromptSection{
+				{Content: "Content with\nnewline"},
+				{Content: "Content with # markdown"},
+			},
+			expected: "Content with\nnewline\n\n---\n\nContent with # markdown",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			analysis := &ProjectAnalysis{Name: "test"}
+			composer := NewComposer(analysis, []CheckRecommendation{})
+			result := composer.assembleSections(tc.sections)
+
+			if result != tc.expected {
+				t.Errorf("assembleSections() mismatch\nExpected: %q\nGot:      %q", tc.expected, result)
+			}
+		})
+	}
+}
+
+func TestAssembleSections_BoundaryCondition(t *testing.T) {
+	analysis := &ProjectAnalysis{Name: "test"}
+	composer := NewComposer(analysis, []CheckRecommendation{})
+
+	// Test that separators are NOT added after the last section
+	sections := []PromptSection{
+		{Content: "Section1"},
+		{Content: "Section2"},
+		{Content: "Section3"},
+	}
+
+	result := composer.assembleSections(sections)
+
+	// Should NOT end with separator
+	if strings.HasSuffix(result, "\n\n---\n\n") {
+		t.Error("assembleSections should not add separator after last section")
+	}
+
+	// Should contain exactly 2 separators for 3 sections
+	separatorCount := strings.Count(result, "\n\n---\n\n")
+	if separatorCount != 2 {
+		t.Errorf("assembleSections should have 2 separators for 3 sections, got %d", separatorCount)
+	}
+}
