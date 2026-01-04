@@ -1625,3 +1625,517 @@ func sliceContains(slice []string, value string) bool {
 	}
 	return false
 }
+
+// ========== Comprehensive Boundary Condition Tests ==========
+// These tests target critical boundary conditions and decision points
+// that mutations may exploit (len > 1, == checks, boolean branches, etc.)
+
+func TestMetadataExtractor_ExtractNodeMetadata_RepositoryOnlyUrl(t *testing.T) {
+	// Test boundary: repository field exists but doesn't have "url" key
+	tmpDir := t.TempDir()
+	packageJSON := `{
+		"name": "test-pkg",
+		"version": "1.0.0",
+		"repository": {
+			"type": "git"
+		}
+	}`
+	if err := os.WriteFile(filepath.Join(tmpDir, "package.json"), []byte(packageJSON), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	extractor := NewMetadataExtractor(tmpDir)
+	metadata, err := extractor.Extract(Node)
+	if err != nil {
+		t.Fatalf("Extract() error = %v", err)
+	}
+
+	// Repository should remain empty when url key is missing
+	if metadata.Repository != "" {
+		t.Errorf("Repository = %q, want empty string", metadata.Repository)
+	}
+}
+
+func TestMetadataExtractor_ExtractPythonMetadata_NoProjectSection(t *testing.T) {
+	// Test boundary: pyproject.toml without [project] section
+	tmpDir := t.TempDir()
+	pyproject := `[tool.other]
+name = "should-not-match"
+version = "1.0.0"
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "pyproject.toml"), []byte(pyproject), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	extractor := NewMetadataExtractor(tmpDir)
+	metadata, err := extractor.Extract(Python)
+	if err != nil {
+		t.Fatalf("Extract() error = %v", err)
+	}
+
+	// Should ignore fields outside [project] section
+	if metadata.Name != "" {
+		t.Errorf("Name = %q, want empty", metadata.Name)
+	}
+	if metadata.Version != "" {
+		t.Errorf("Version = %q, want empty", metadata.Version)
+	}
+}
+
+func TestMetadataExtractor_ExtractPythonMetadata_AuthorsSectionMultipleBrackets(t *testing.T) {
+	// Test boundary: transition between sections when parsing authors
+	tmpDir := t.TempDir()
+	pyproject := `[project]
+name = "test-pkg"
+authors = [
+    "Author One"
+]
+
+[build-system]
+requires = ["setuptools"]
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "pyproject.toml"), []byte(pyproject), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	extractor := NewMetadataExtractor(tmpDir)
+	metadata, err := extractor.Extract(Python)
+	if err != nil {
+		t.Fatalf("Extract() error = %v", err)
+	}
+
+	if metadata.Name != "test-pkg" {
+		t.Errorf("Name = %q, want %q", metadata.Name, "test-pkg")
+	}
+	if metadata.Author != "Author One" {
+		t.Errorf("Author = %q, want %q", metadata.Author, "Author One")
+	}
+}
+
+func TestMetadataExtractor_ExtractRustMetadata_MultiplePackageSections(t *testing.T) {
+	// Test boundary: section detection when re-entering [package] section
+	// Note: The code sets inPackageSection=true whenever [package] is found,
+	// so later fields override earlier ones within the scope
+	tmpDir := t.TempDir()
+	cargoToml := `[package]
+name = "rust-pkg"
+version = "0.1.0"
+
+[dependencies]
+tokio = "1.0"
+
+[package]
+# This DOES get processed (test that we can re-enter package section)
+name = "override"
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "Cargo.toml"), []byte(cargoToml), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	extractor := NewMetadataExtractor(tmpDir)
+	metadata, err := extractor.Extract(Rust)
+	if err != nil {
+		t.Fatalf("Extract() error = %v", err)
+	}
+
+	// The code processes all [package] sections, so the later value overrides
+	if metadata.Name != "override" {
+		t.Errorf("Name = %q, want %q (later [package] section overrides)", metadata.Name, "override")
+	}
+}
+
+func TestMetadataExtractor_ExtractPythonMetadata_EmptyAuthorsArray(t *testing.T) {
+	// Test boundary: authors array exists but is empty
+	tmpDir := t.TempDir()
+	pyproject := `[project]
+name = "test-pkg"
+version = "1.0.0"
+authors = []
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "pyproject.toml"), []byte(pyproject), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	extractor := NewMetadataExtractor(tmpDir)
+	metadata, err := extractor.Extract(Python)
+	if err != nil {
+		t.Fatalf("Extract() error = %v", err)
+	}
+
+	if metadata.Author != "" {
+		t.Errorf("Author = %q, want empty", metadata.Author)
+	}
+}
+
+func TestMetadataExtractor_ExtractGemspec_AuthorArray(t *testing.T) {
+	// Test boundary: .authors (array) vs .author (single)
+	tmpDir := t.TempDir()
+	gemspec := `Gem::Specification.new do |s|
+  s.name        = "my-gem"
+  s.version     = "1.0.0"
+  s.authors     = ["First Author", "Second Author"]
+  s.license     = "MIT"
+end
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "my-gem.gemspec"), []byte(gemspec), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	extractor := NewMetadataExtractor(tmpDir)
+	metadata, err := extractor.Extract(Ruby)
+	if err != nil {
+		t.Fatalf("Extract() error = %v", err)
+	}
+
+	// Should extract first author from array
+	if metadata.Author != "First Author" {
+		t.Errorf("Author = %q, want %q", metadata.Author, "First Author")
+	}
+}
+
+func TestMetadataExtractor_ExtractPomXml_MultipleTags(t *testing.T) {
+	// Test boundary: duplicate tags (should use first match)
+	tmpDir := t.TempDir()
+	pomXml := `<?xml version="1.0" encoding="UTF-8"?>
+<project>
+    <groupId>com.first</groupId>
+    <groupId>com.second</groupId>
+    <artifactId>first-artifact</artifactId>
+    <artifactId>second-artifact</artifactId>
+    <version>1.0.0</version>
+    <version>2.0.0</version>
+</project>
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "pom.xml"), []byte(pomXml), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	extractor := NewMetadataExtractor(tmpDir)
+	metadata, err := extractor.Extract(Java)
+	if err != nil {
+		t.Fatalf("Extract() error = %v", err)
+	}
+
+	if metadata.Extra["group_id"] != "com.first" {
+		t.Errorf("group_id = %q, want %q", metadata.Extra["group_id"], "com.first")
+	}
+	if metadata.Version != "1.0.0" {
+		t.Errorf("Version = %q, want %q", metadata.Version, "1.0.0")
+	}
+}
+
+func TestMetadataExtractor_ExtractSetupPy_QuoteVariations(t *testing.T) {
+	// Test boundary: both single and double quotes
+	tmpDir := t.TempDir()
+	setupPy := `setup(
+    name='single-quoted',
+    version="double-quoted",
+    author='Single Author'
+)
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "setup.py"), []byte(setupPy), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	extractor := NewMetadataExtractor(tmpDir)
+	metadata, err := extractor.Extract(Python)
+	if err != nil {
+		t.Fatalf("Extract() error = %v", err)
+	}
+
+	if metadata.Name != "single-quoted" {
+		t.Errorf("Name = %q, want %q", metadata.Name, "single-quoted")
+	}
+	if metadata.Version != "double-quoted" {
+		t.Errorf("Version = %q, want %q", metadata.Version, "double-quoted")
+	}
+}
+
+func TestMetadataExtractor_ExtractJavaMetadata_ArtifactIdBeforeName(t *testing.T) {
+	// Test boundary: pom.xml with artifactId processed first but name exists
+	tmpDir := t.TempDir()
+	pomXml := `<?xml version="1.0" encoding="UTF-8"?>
+<project>
+    <artifactId>artifact-value</artifactId>
+    <name>name-value</name>
+</project>
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "pom.xml"), []byte(pomXml), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	extractor := NewMetadataExtractor(tmpDir)
+	metadata, err := extractor.Extract(Java)
+	if err != nil {
+		t.Fatalf("Extract() error = %v", err)
+	}
+
+	// name field should override artifactId
+	if metadata.Name != "name-value" {
+		t.Errorf("Name = %q, want %q", metadata.Name, "name-value")
+	}
+}
+
+func TestMetadataExtractor_FileExists_EdgeCases(t *testing.T) {
+	// Test boundary: fileExists with directory instead of file
+	tmpDir := t.TempDir()
+
+	if err := os.Mkdir(filepath.Join(tmpDir, "subdir"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	extractor := NewMetadataExtractor(tmpDir)
+	// Should return false for directories
+	if extractor.fileExists("subdir") {
+		t.Error("fileExists() should return false for directories")
+	}
+}
+
+func TestMetadataExtractor_DirExists_EdgeCases(t *testing.T) {
+	// Test boundary: dirExists with file instead of directory
+	tmpDir := t.TempDir()
+
+	if err := os.WriteFile(filepath.Join(tmpDir, "file.txt"), []byte("content"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	extractor := NewMetadataExtractor(tmpDir)
+	// Should return false for files
+	if extractor.dirExists("file.txt") {
+		t.Error("dirExists() should return false for files")
+	}
+}
+
+func TestMetadataExtractor_ExtractGoMetadata_EmptyModuleName(t *testing.T) {
+	// Test boundary: module line exists but has no actual name (whitespace only)
+	tmpDir := t.TempDir()
+	goMod := `module
+go 1.21
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte(goMod), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	extractor := NewMetadataExtractor(tmpDir)
+	metadata, err := extractor.Extract(Go)
+	if err != nil {
+		t.Fatalf("Extract() error = %v", err)
+	}
+
+	// Should have empty name (TrimSpace handles this)
+	if metadata.Name != "" {
+		t.Errorf("Name = %q, want empty", metadata.Name)
+	}
+}
+
+func TestMetadataExtractor_ExtractNodeMetadata_AuthorObjectNoName(t *testing.T) {
+	// Test boundary: author object without name field (only email)
+	tmpDir := t.TempDir()
+	packageJSON := `{
+		"name": "test-pkg",
+		"author": {
+			"email": "test@example.com"
+		}
+	}`
+	if err := os.WriteFile(filepath.Join(tmpDir, "package.json"), []byte(packageJSON), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	extractor := NewMetadataExtractor(tmpDir)
+	metadata, err := extractor.Extract(Node)
+	if err != nil {
+		t.Fatalf("Extract() error = %v", err)
+	}
+
+	// Author should be empty when name is not present
+	if metadata.Author != "" {
+		t.Errorf("Author = %q, want empty", metadata.Author)
+	}
+}
+
+func TestMetadataExtractor_ExtractStructure_AllConfigFilesPresent(t *testing.T) {
+	// Test boundary: when multiple config files exist, they should all be detected
+	tmpDir := t.TempDir()
+
+	configFiles := []string{
+		"go.mod", "package.json", "pyproject.toml", "Cargo.toml",
+		"Gemfile", "pom.xml", ".golangci.yml", "Makefile",
+	}
+	for _, f := range configFiles {
+		if err := os.WriteFile(filepath.Join(tmpDir, f), []byte(""), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	extractor := NewMetadataExtractor(tmpDir)
+	structure, err := extractor.ExtractStructure(Go)
+	if err != nil {
+		t.Fatalf("ExtractStructure() error = %v", err)
+	}
+
+	// All should be detected
+	for _, f := range configFiles {
+		if !sliceContains(structure.ConfigFiles, f) {
+			t.Errorf("ConfigFiles should contain %q, got %v", f, structure.ConfigFiles)
+		}
+	}
+}
+
+func TestMetadataExtractor_FindGoTestDirs_SortConsistency(t *testing.T) {
+	// Test boundary: sorting of test directories with >1 results (bubble sort loop)
+	tmpDir := t.TempDir()
+
+	dirs := []string{"pkg/z", "pkg/a", "internal/m"}
+	for _, dir := range dirs {
+		if err := os.MkdirAll(filepath.Join(tmpDir, dir), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	files := []string{
+		"pkg/z/z_test.go",
+		"pkg/a/a_test.go",
+		"internal/m/m_test.go",
+	}
+	for _, file := range files {
+		path := filepath.Join(tmpDir, file)
+		if err := os.WriteFile(path, []byte("package test\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	extractor := NewMetadataExtractor(tmpDir)
+	testDirs := extractor.findGoTestDirs()
+
+	// Should be sorted
+	if len(testDirs) < 2 {
+		t.Errorf("Expected at least 2 test dirs, got %v", testDirs)
+	}
+
+	// Verify sorted order
+	for i := 0; i < len(testDirs)-1; i++ {
+		if testDirs[i] > testDirs[i+1] {
+			t.Errorf("TestDirs not sorted: %v", testDirs)
+		}
+	}
+}
+
+func TestMetadataExtractor_ExtractStructure_SingleConfigFile(t *testing.T) {
+	// Test boundary: single config file (len check at boundary of 1)
+	tmpDir := t.TempDir()
+
+	if err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module test\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	extractor := NewMetadataExtractor(tmpDir)
+	structure, err := extractor.ExtractStructure(Go)
+	if err != nil {
+		t.Fatalf("ExtractStructure() error = %v", err)
+	}
+
+	// Should have exactly one config file
+	if len(structure.ConfigFiles) != 1 {
+		t.Errorf("ConfigFiles length = %d, want 1", len(structure.ConfigFiles))
+	}
+	if !sliceContains(structure.ConfigFiles, "go.mod") {
+		t.Errorf("ConfigFiles should contain 'go.mod', got %v", structure.ConfigFiles)
+	}
+}
+
+func TestMetadataExtractor_IsGoSourceDir_Boundary(t *testing.T) {
+	// Test boundary: Check all source dir prefixes are recognized
+	extractor := NewMetadataExtractor(".")
+
+	prefixes := []string{"cmd", "pkg", "internal", "lib", "api", "app"}
+	for _, prefix := range prefixes {
+		if !extractor.isGoSourceDir(prefix) {
+			t.Errorf("isGoSourceDir(%q) should be true", prefix)
+		}
+		if !extractor.isGoSourceDir(prefix + "/subdir") {
+			t.Errorf("isGoSourceDir(%q/subdir) should be true", prefix)
+		}
+	}
+
+	// Non-standard directories should return false
+	if extractor.isGoSourceDir("docs") {
+		t.Error("isGoSourceDir(docs) should be false")
+	}
+}
+
+func TestMetadataExtractor_ExtractStructure_FirstBuildOutputDir(t *testing.T) {
+	// Test boundary: when multiple build output dirs exist, uses first
+	tmpDir := t.TempDir()
+
+	buildDirs := []string{"bin", "dist", "build"}
+	for _, dir := range buildDirs {
+		if err := os.MkdirAll(filepath.Join(tmpDir, dir), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module test\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	extractor := NewMetadataExtractor(tmpDir)
+	structure, err := extractor.ExtractStructure(Go)
+	if err != nil {
+		t.Fatalf("ExtractStructure() error = %v", err)
+	}
+
+	// Should use first matching directory
+	if structure.BuildOutputDir != "bin" {
+		t.Errorf("BuildOutputDir = %q, want %q (first match)", structure.BuildOutputDir, "bin")
+	}
+}
+
+func TestMetadataExtractor_ExtractNodeMetadata_RepositoryEmptyObject(t *testing.T) {
+	// Test boundary: repository object exists but has no url
+	tmpDir := t.TempDir()
+	packageJSON := `{
+		"name": "test-pkg",
+		"repository": {}
+	}`
+	if err := os.WriteFile(filepath.Join(tmpDir, "package.json"), []byte(packageJSON), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	extractor := NewMetadataExtractor(tmpDir)
+	metadata, err := extractor.Extract(Node)
+	if err != nil {
+		t.Fatalf("Extract() error = %v", err)
+	}
+
+	if metadata.Repository != "" {
+		t.Errorf("Repository = %q, want empty", metadata.Repository)
+	}
+}
+
+func TestMetadataExtractor_ExtractBuildGradle_FirstMatch(t *testing.T) {
+	// Test boundary: gradle file with multiple pattern matches (uses first)
+	tmpDir := t.TempDir()
+	buildGradle := `group = 'first.group'
+group = 'second.group'
+
+version = '1.0.0'
+version = '2.0.0'
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "build.gradle"), []byte(buildGradle), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	extractor := NewMetadataExtractor(tmpDir)
+	metadata, err := extractor.Extract(Java)
+	if err != nil {
+		t.Fatalf("Extract() error = %v", err)
+	}
+
+	// Should use first match
+	if metadata.Extra["group"] != "first.group" {
+		t.Errorf("group = %q, want %q", metadata.Extra["group"], "first.group")
+	}
+	if metadata.Version != "1.0.0" {
+		t.Errorf("Version = %q, want %q", metadata.Version, "1.0.0")
+	}
+}
