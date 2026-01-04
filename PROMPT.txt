@@ -2,5 +2,6 @@ get the current available work "what should I work on"
 Pick item 1 
 work on the task until complete 
 create issues for any issues that you find
+run `vibeguard check` and fix any failures raised
 log your findings
 commit your changes

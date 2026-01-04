@@ -2645,3 +2645,650 @@ test-watch:
 		t.Error("jest should be detected from Makefile")
 	}
 }
+
+// Boundary tests for edge cases and LIVED mutations
+
+func TestToolScanner_ScanNodeTools_GiminyEdgeCases(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Test with package.json that has empty devDependencies
+	pkgJSON := `{
+		"name": "test",
+		"devDependencies": {}
+	}`
+	if err := os.WriteFile(filepath.Join(tmpDir, "package.json"), []byte(pkgJSON), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	tools, err := scanner.scanNodeTools()
+	if err != nil {
+		t.Fatalf("scanNodeTools failed: %v", err)
+	}
+
+	// npm audit should still be detected with package.json present
+	var npmAudit *ToolInfo
+	for i := range tools {
+		if tools[i].Name == "npm audit" {
+			npmAudit = &tools[i]
+			break
+		}
+	}
+
+	if npmAudit == nil || !npmAudit.Detected {
+		t.Error("npm audit should be detected even with empty devDependencies")
+	}
+	if npmAudit.Confidence != 1.0 {
+		t.Errorf("npm audit confidence should be 1.0, got %f", npmAudit.Confidence)
+	}
+}
+
+func TestToolScanner_ScanNodeTools_PackageJSONNotDetectedBoundary(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// No package.json at all
+	scanner := NewToolScanner(tmpDir)
+	tools, err := scanner.scanNodeTools()
+	if err != nil {
+		t.Fatalf("scanNodeTools failed: %v", err)
+	}
+
+	// npm audit should NOT be detected without package.json
+	for _, tool := range tools {
+		if tool.Name == "npm audit" && tool.Detected {
+			t.Error("npm audit should not be detected without package.json")
+		}
+	}
+}
+
+func TestToolScanner_ScanGoTools_GomodMissingBoundary(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// No go.mod file
+	scanner := NewToolScanner(tmpDir)
+	tools, err := scanner.scanGoTools()
+	if err != nil {
+		t.Fatalf("scanGoTools failed: %v", err)
+	}
+
+	// Go builtin tools should not be detected
+	for _, tool := range tools {
+		if (tool.Name == "gofmt" || tool.Name == "go vet" || tool.Name == "go test") && tool.Detected {
+			t.Errorf("%s should not be detected without go.mod", tool.Name)
+		}
+	}
+}
+
+func TestToolScanner_ScanCITools_NoWorkflowsDirectory(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create .github directory but no workflows subdirectory
+	githubDir := filepath.Join(tmpDir, ".github")
+	if err := os.MkdirAll(githubDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	tools, err := scanner.scanCITools()
+	if err != nil {
+		t.Fatalf("scanCITools failed: %v", err)
+	}
+
+	var githubActions *ToolInfo
+	for i := range tools {
+		if tools[i].Name == "GitHub Actions" {
+			githubActions = &tools[i]
+			break
+		}
+	}
+
+	if githubActions != nil && githubActions.Detected {
+		t.Error("GitHub Actions should not be detected without workflows directory")
+	}
+}
+
+func TestToolScanner_ScanGitHooks_OnlyWhitespaceHooks(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create .git/hooks directory with only sample files
+	hooksDir := filepath.Join(tmpDir, ".git", "hooks")
+	if err := os.MkdirAll(hooksDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write only .sample files
+	if err := os.WriteFile(filepath.Join(hooksDir, "pre-commit.sample"), []byte("#!/bin/sh\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(hooksDir, "pre-push.sample"), []byte("#!/bin/sh\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	tools, err := scanner.scanGitHooks()
+	if err != nil {
+		t.Fatalf("scanGitHooks failed: %v", err)
+	}
+
+	var rawHooks *ToolInfo
+	for i := range tools {
+		if tools[i].Name == "git hooks" {
+			rawHooks = &tools[i]
+			break
+		}
+	}
+
+	if rawHooks != nil && rawHooks.Detected {
+		t.Error("git hooks should not be detected with only sample files")
+	}
+}
+
+func TestToolScanner_ScanGitHooks_NonStandardHookNames(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create .git/hooks directory with non-standard hook names
+	hooksDir := filepath.Join(tmpDir, ".git", "hooks")
+	if err := os.MkdirAll(hooksDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write non-standard hook file
+	if err := os.WriteFile(filepath.Join(hooksDir, "custom-hook"), []byte("#!/bin/sh\n"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	tools, err := scanner.scanGitHooks()
+	if err != nil {
+		t.Fatalf("scanGitHooks failed: %v", err)
+	}
+
+	var rawHooks *ToolInfo
+	for i := range tools {
+		if tools[i].Name == "git hooks" {
+			rawHooks = &tools[i]
+			break
+		}
+	}
+
+	// Non-standard hooks should not be detected
+	if rawHooks != nil && rawHooks.Detected {
+		t.Error("git hooks should not be detected with non-standard hook names")
+	}
+}
+
+func TestToolScanner_ScanScriptsForTool_NoScriptsDir(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	scanner := NewToolScanner(tmpDir)
+	found, indicators := scanner.scanScriptsForTool("golangci-lint")
+
+	if found {
+		t.Error("should not find tools when scripts directory doesn't exist")
+	}
+	if len(indicators) > 0 {
+		t.Errorf("should have no indicators when scripts directory doesn't exist, got %v", indicators)
+	}
+}
+
+func TestToolScanner_ScanScriptsForTool_EmptyScriptsDir(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create empty scripts directory
+	scriptsDir := filepath.Join(tmpDir, "scripts")
+	if err := os.MkdirAll(scriptsDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	found, indicators := scanner.scanScriptsForTool("eslint")
+
+	if found {
+		t.Error("should not find tools in empty scripts directory")
+	}
+	if len(indicators) > 0 {
+		t.Errorf("should have no indicators in empty scripts directory, got %v", indicators)
+	}
+}
+
+func TestToolScanner_EnhanceToolDetection_NoIndicators(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	scanner := NewToolScanner(tmpDir)
+	confidence, indicators := scanner.enhanceToolDetection("nonexistent-tool")
+
+	if confidence > 0 {
+		t.Errorf("confidence should be 0 for nonexistent tool, got %f", confidence)
+	}
+	if len(indicators) > 0 {
+		t.Errorf("should have no indicators for nonexistent tool, got %v", indicators)
+	}
+}
+
+func TestToolScanner_EnhanceToolDetection_OnlyScripts(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create scripts directory with tool reference
+	scriptsDir := filepath.Join(tmpDir, "scripts")
+	if err := os.MkdirAll(scriptsDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	scriptContent := `#!/bin/bash
+eslint src/
+`
+	if err := os.WriteFile(filepath.Join(scriptsDir, "lint.sh"), []byte(scriptContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	confidence, indicators := scanner.enhanceToolDetection("eslint")
+
+	if confidence < 0.5 || confidence > 0.7 {
+		t.Errorf("confidence for script-only detection should be ~0.65, got %f", confidence)
+	}
+	if len(indicators) == 0 {
+		t.Error("should have indicators when found in scripts")
+	}
+}
+
+func TestToolScanner_ScanCITools_EmptyWorkflowsDir(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create .github/workflows directory but leave it empty
+	workflowDir := filepath.Join(tmpDir, ".github", "workflows")
+	if err := os.MkdirAll(workflowDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	tools, err := scanner.scanCITools()
+	if err != nil {
+		t.Fatalf("scanCITools failed: %v", err)
+	}
+
+	var githubActions *ToolInfo
+	for i := range tools {
+		if tools[i].Name == "GitHub Actions" {
+			githubActions = &tools[i]
+			break
+		}
+	}
+
+	if githubActions != nil && githubActions.Detected {
+		t.Error("GitHub Actions should not be detected with empty workflows directory")
+	}
+}
+
+func TestToolScanner_ReadPackageJSON_EmptyFile(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Write empty file
+	if err := os.WriteFile(filepath.Join(tmpDir, "package.json"), []byte(""), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	pkg, err := scanner.readPackageJSON()
+
+	// Should return error for empty file (invalid JSON)
+	if err == nil {
+		t.Error("expected error for empty JSON file")
+	}
+	if pkg != nil {
+		t.Error("expected nil package for empty JSON file")
+	}
+}
+
+func TestToolScanner_ScanCIWorkflowsForTool_NoWorkflows(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	scanner := NewToolScanner(tmpDir)
+	found, indicators := scanner.scanCIWorkflowsForTool("pytest")
+
+	if found {
+		t.Error("should not find tools when no CI configs exist")
+	}
+	if len(indicators) > 0 {
+		t.Errorf("should have no indicators when no CI configs exist, got %v", indicators)
+	}
+}
+
+func TestToolScanner_ScanMakefileForTool_NoMakefile(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	scanner := NewToolScanner(tmpDir)
+	found, makefile := scanner.scanMakefileForTool("goimports")
+
+	if found {
+		t.Error("should not find tools when Makefile doesn't exist")
+	}
+	if makefile != "" {
+		t.Errorf("should return empty string for makefile name, got %s", makefile)
+	}
+}
+
+func TestToolScanner_FindFile_NoMatches(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	scanner := NewToolScanner(tmpDir)
+	result := scanner.findFile(".eslintrc", ".eslintrc.js", ".eslintrc.json")
+
+	if result != "" {
+		t.Errorf("findFile should return empty string when no files exist, got %s", result)
+	}
+}
+
+func TestToolScanner_FileExists_Directory(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a directory
+	subDir := filepath.Join(tmpDir, "subdir")
+	if err := os.MkdirAll(subDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	exists := scanner.fileExists("subdir")
+
+	// fileExists should return false for directories
+	if exists {
+		t.Error("fileExists should return false for directories")
+	}
+}
+
+func TestToolScanner_DirExists_File(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a file
+	if err := os.WriteFile(filepath.Join(tmpDir, "test.txt"), []byte("test"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	exists := scanner.dirExists("test.txt")
+
+	// dirExists should return false for files
+	if exists {
+		t.Error("dirExists should return false for files")
+	}
+}
+
+func TestToolScanner_FileContains_NotFound(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	if err := os.WriteFile(filepath.Join(tmpDir, "test.txt"), []byte("hello world"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	contains := scanner.fileContains("test.txt", "missing")
+
+	if contains {
+		t.Error("fileContains should return false when substring not found")
+	}
+}
+
+func TestToolScanner_FileContains_NonExistentFile(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	scanner := NewToolScanner(tmpDir)
+	contains := scanner.fileContains("nonexistent.txt", "anything")
+
+	if contains {
+		t.Error("fileContains should return false for non-existent files")
+	}
+}
+
+// Additional tests for specific LIVED mutations
+
+func TestToolScanner_ScanNodeTools_MochaWithPackageJSONOnly(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Package.json with mocha but no config file
+	pkgJSON := `{"name": "test", "devDependencies": {"mocha": "^10.0.0"}}`
+	if err := os.WriteFile(filepath.Join(tmpDir, "package.json"), []byte(pkgJSON), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	tools, err := scanner.scanNodeTools()
+	if err != nil {
+		t.Fatalf("scanNodeTools failed: %v", err)
+	}
+
+	var mocha *ToolInfo
+	for i := range tools {
+		if tools[i].Name == "mocha" {
+			mocha = &tools[i]
+			break
+		}
+	}
+
+	if mocha == nil || !mocha.Detected {
+		t.Error("mocha should be detected from package.json devDependencies")
+	} else {
+		// Verify confidence is lower (0.8) than config file detection (0.9)
+		if mocha.Confidence >= 0.9 {
+			t.Errorf("mocha confidence from devDeps should be < 0.9, got %f", mocha.Confidence)
+		}
+		if mocha.Confidence < 0.7 {
+			t.Errorf("mocha confidence from devDeps should be >= 0.7, got %f", mocha.Confidence)
+		}
+	}
+}
+
+func TestToolScanner_ScanNodeTools_VitestWithPackageJSONOnly(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Package.json with vitest but no config file
+	pkgJSON := `{"name": "test", "devDependencies": {"vitest": "^1.0.0"}}`
+	if err := os.WriteFile(filepath.Join(tmpDir, "package.json"), []byte(pkgJSON), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	tools, err := scanner.scanNodeTools()
+	if err != nil {
+		t.Fatalf("scanNodeTools failed: %v", err)
+	}
+
+	var vitest *ToolInfo
+	for i := range tools {
+		if tools[i].Name == "vitest" {
+			vitest = &tools[i]
+			break
+		}
+	}
+
+	if vitest == nil || !vitest.Detected {
+		t.Error("vitest should be detected from package.json devDependencies")
+	} else {
+		// Verify confidence is 0.8 for package.json detection
+		if vitest.Confidence != 0.8 {
+			t.Errorf("vitest confidence from devDeps should be 0.8, got %f", vitest.Confidence)
+		}
+	}
+}
+
+func TestToolScanner_ScanScriptsForTool_ExecutableFile(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create scripts directory with executable file (no extension)
+	scriptsDir := filepath.Join(tmpDir, "bin")
+	if err := os.MkdirAll(scriptsDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write executable file with tool reference (no extension = executable check)
+	scriptContent := `#!/bin/bash
+golangci-lint run ./...
+`
+	if err := os.WriteFile(filepath.Join(scriptsDir, "lint"), []byte(scriptContent), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	found, indicators := scanner.scanScriptsForTool("golangci-lint")
+
+	if !found {
+		t.Error("should find golangci-lint in scripts directory")
+	}
+	if len(indicators) == 0 {
+		t.Error("should have indicators when found in scripts")
+	}
+}
+
+func TestToolScanner_EnhanceToolDetection_CIOnly(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create CI config with tool reference (no Makefile, no scripts)
+	workflowDir := filepath.Join(tmpDir, ".github", "workflows")
+	if err := os.MkdirAll(workflowDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	workflow := `name: CI
+jobs:
+  test:
+    steps:
+      - run: pytest tests/
+`
+	if err := os.WriteFile(filepath.Join(workflowDir, "ci.yml"), []byte(workflow), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	confidence, indicators := scanner.enhanceToolDetection("pytest")
+
+	// Should have at least 0.75 confidence from CI workflow
+	if confidence < 0.75 {
+		t.Errorf("confidence for CI detection should be >= 0.75, got %f", confidence)
+	}
+	if len(indicators) == 0 {
+		t.Error("should have indicators when found in CI workflow")
+	}
+}
+
+func TestToolScanner_EnhanceToolDetection_MakefileAndCI(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Write Makefile with tool reference
+	if err := os.WriteFile(filepath.Join(tmpDir, "Makefile"), []byte("test:\n\tpytest tests/\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create CI config with same tool
+	workflowDir := filepath.Join(tmpDir, ".github", "workflows")
+	if err := os.MkdirAll(workflowDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workflowDir, "ci.yml"), []byte("jobs:\n  test:\n    run: pytest\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	confidence, indicators := scanner.enhanceToolDetection("pytest")
+
+	// Should use the higher confidence from CI (0.75) since Makefile gives 0.7
+	if confidence < 0.75 {
+		t.Errorf("confidence should be at least 0.75 (CI wins over Makefile), got %f", confidence)
+	}
+	// Should have multiple indicators
+	if len(indicators) < 2 {
+		t.Errorf("should have indicators from both Makefile and CI, got %d: %v", len(indicators), indicators)
+	}
+}
+
+func TestToolScanner_EnhanceToolDetection_AllThreeSources(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Write Makefile
+	if err := os.WriteFile(filepath.Join(tmpDir, "Makefile"), []byte("lint:\n\tflake8 src/\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create CI config
+	workflowDir := filepath.Join(tmpDir, ".github", "workflows")
+	if err := os.MkdirAll(workflowDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workflowDir, "ci.yml"), []byte("jobs:\n  lint:\n    run: flake8\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create scripts directory with tool
+	scriptsDir := filepath.Join(tmpDir, "scripts")
+	if err := os.MkdirAll(scriptsDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(scriptsDir, "lint.sh"), []byte("#!/bin/bash\nflake8 src/\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	confidence, indicators := scanner.enhanceToolDetection("flake8")
+
+	// Should use the highest confidence from CI (0.75)
+	if confidence < 0.75 {
+		t.Errorf("confidence should be at least 0.75, got %f", confidence)
+	}
+	// Should have indicators from all three sources
+	if len(indicators) < 3 {
+		t.Errorf("should have indicators from Makefile, CI, and scripts, got %d: %v", len(indicators), indicators)
+	}
+}
+
+func TestToolScanner_EnhanceToolDetection_ScriptOnly(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create only scripts directory with tool (no Makefile, no CI)
+	scriptsDir := filepath.Join(tmpDir, "scripts")
+	if err := os.MkdirAll(scriptsDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(scriptsDir, "test.sh"), []byte("#!/bin/bash\njest tests/\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	confidence, indicators := scanner.enhanceToolDetection("jest")
+
+	// Should have 0.65 confidence from scripts only
+	if confidence < 0.65 {
+		t.Errorf("confidence for script-only detection should be >= 0.65, got %f", confidence)
+	}
+	if len(indicators) == 0 {
+		t.Error("should have indicators when found in scripts")
+	}
+}
+
+func TestToolScanner_EnhanceToolDetection_MakefileAndScripts(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Write Makefile
+	if err := os.WriteFile(filepath.Join(tmpDir, "Makefile"), []byte("fmt:\n\tgoimports -w .\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create scripts directory
+	scriptsDir := filepath.Join(tmpDir, "scripts")
+	if err := os.MkdirAll(scriptsDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(scriptsDir, "format.sh"), []byte("#!/bin/bash\ngoimports -w .\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	scanner := NewToolScanner(tmpDir)
+	confidence, indicators := scanner.enhanceToolDetection("goimports")
+
+	// Should use the higher confidence from Makefile (0.7 > 0.65)
+	if confidence < 0.7 {
+		t.Errorf("confidence should be at least 0.7 (Makefile wins over scripts), got %f", confidence)
+	}
+	// Should have indicators from both
+	if len(indicators) < 2 {
+		t.Errorf("should have indicators from both Makefile and scripts, got %d: %v", len(indicators), indicators)
+	}
+}
