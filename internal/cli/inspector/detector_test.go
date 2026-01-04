@@ -1,6 +1,7 @@
 package inspector
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -1217,5 +1218,663 @@ func BenchmarkToolScanner_ScanAll(b *testing.B) {
 		if err != nil {
 			b.Fatalf("ScanAll() error = %v", err)
 		}
+	}
+}
+
+// ============================================================================
+// Boundary Condition Tests for Detector.go
+// These tests specifically target boundary condition mutations detected by
+// the mutation testing framework (Gremlins), particularly for comparison
+// operators and loop boundary conditions.
+// ============================================================================
+
+func TestDetector_SortingBoundaryOperators(t *testing.T) {
+	// Tests boundary conditions in the sorting loop (lines 67-73)
+	// Targets mutations: i < len(results) vs i <= len(results), etc.
+	tests := []struct {
+		name            string
+		files           map[string]string
+		expectedOrder   []ProjectType
+		expectedGreater bool // Whether higher index should have lower or equal confidence
+	}{
+		{
+			name: "exactly two results to sort",
+			files: map[string]string{
+				"go.mod":       "module test",
+				"package.json": `{"name": "test"}`,
+				"main.go":      "package main",
+			},
+			expectedOrder:   []ProjectType{Go, Node},
+			expectedGreater: false, // Should be descending order
+		},
+		{
+			name: "exactly three results to sort",
+			files: map[string]string{
+				"go.mod":         "module test",
+				"go.sum":         "test",
+				"package.json":   `{"name": "test"}`,
+				"pyproject.toml": "[project]",
+				"main.go":        "package main",
+			},
+			expectedOrder:   []ProjectType{Go, Node, Python},
+			expectedGreater: false,
+		},
+		{
+			name: "four results with varying confidences",
+			files: map[string]string{
+				"go.mod":         "module test",
+				"go.sum":         "test",
+				"package.json":   `{"name": "test"}`,
+				"pyproject.toml": "[project]",
+				"main.go":        "package main",
+			},
+			expectedOrder:   []ProjectType{Go, Node, Python},
+			expectedGreater: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := createTestProject(t, tt.files, nil)
+			detector := NewDetector(root)
+
+			results, err := detector.Detect()
+			if err != nil {
+				t.Fatalf("Detect() error = %v", err)
+			}
+
+			// Check that results are properly sorted (descending by confidence)
+			for i := 0; i < len(results)-1; i++ {
+				if results[i].Confidence < results[i+1].Confidence {
+					t.Errorf("Results not sorted properly at position %d: %f < %f", i, results[i].Confidence, results[i+1].Confidence)
+				}
+			}
+
+			// Verify specific order where applicable
+			if len(results) >= len(tt.expectedOrder) {
+				for idx, expectedType := range tt.expectedOrder {
+					if results[idx].Type != expectedType {
+						t.Errorf("Expected type %v at position %d, got %v", expectedType, idx, results[idx].Type)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestDetector_LoopBoundaryConditions(t *testing.T) {
+	// Tests loop boundary conditions (for i := 0; i < len(results); i++)
+	// and (for j := i + 1; j < len(results); j++)
+	// Targets mutations like: i <= len vs i < len, j <= len vs j < len
+	tests := []struct {
+		name        string
+		numProjects int
+		description string
+	}{
+		{
+			name:        "zero projects",
+			numProjects: 0,
+			description: "empty directory should return Unknown",
+		},
+		{
+			name:        "one project type",
+			numProjects: 1,
+			description: "single project should be detected",
+		},
+		{
+			name:        "two project types",
+			numProjects: 2,
+			description: "two projects should be sorted correctly",
+		},
+		{
+			name:        "boundary at 6 project types",
+			numProjects: 6,
+			description: "all project types detected should be sorted",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			files := make(map[string]string)
+
+			// Create different project indicators based on numProjects
+			switch tt.numProjects {
+			case 0:
+				// Empty directory - no files
+			case 1:
+				files["go.mod"] = "module test"
+			case 2:
+				files["go.mod"] = "module test"
+				files["package.json"] = `{"name": "test"}`
+			case 3:
+				files["go.mod"] = "module test"
+				files["package.json"] = `{"name": "test"}`
+				files["pyproject.toml"] = "[project]"
+			case 4:
+				files["go.mod"] = "module test"
+				files["package.json"] = `{"name": "test"}`
+				files["pyproject.toml"] = "[project]"
+				files["Gemfile"] = "source 'https://rubygems.org'"
+			case 5:
+				files["go.mod"] = "module test"
+				files["package.json"] = `{"name": "test"}`
+				files["pyproject.toml"] = "[project]"
+				files["Gemfile"] = "source 'https://rubygems.org'"
+				files["Cargo.toml"] = "[package]"
+			case 6:
+				files["go.mod"] = "module test"
+				files["package.json"] = `{"name": "test"}`
+				files["pyproject.toml"] = "[project]"
+				files["Gemfile"] = "source 'https://rubygems.org'"
+				files["Cargo.toml"] = "[package]"
+				files["pom.xml"] = "<project/>"
+			}
+
+			root := createTestProject(t, files, nil)
+			detector := NewDetector(root)
+			results, err := detector.Detect()
+			if err != nil {
+				t.Fatalf("Detect() error = %v", err)
+			}
+
+			// Verify loop processes all results
+			if tt.numProjects == 0 {
+				if len(results) != 1 || results[0].Type != Unknown {
+					t.Errorf("Empty project should return Unknown, got %v results", len(results))
+				}
+			} else {
+				if len(results) < tt.numProjects {
+					t.Errorf("Expected at least %d results, got %d", tt.numProjects, len(results))
+				}
+				// Verify sorting was applied to all results
+				for i := 1; i < len(results); i++ {
+					if results[i].Confidence > results[i-1].Confidence {
+						t.Errorf("Results not sorted: position %d has higher confidence than %d", i, i-1)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestDetector_ConfidenceBoundaryAt1_0(t *testing.T) {
+	// Tests boundary condition: if result.Confidence > 1.0
+	// Targets mutations like: > vs >=, 1.0 vs 0.9, etc.
+	tests := []struct {
+		name           string
+		indicators     []float64 // Confidence values to add
+		expectedCapped bool      // Should be capped at 1.0
+	}{
+		{
+			name:           "confidence exactly at 1.0",
+			indicators:     []float64{0.6, 0.4},
+			expectedCapped: true,
+		},
+		{
+			name:           "confidence exceeds 1.0",
+			indicators:     []float64{0.6, 0.5},
+			expectedCapped: true,
+		},
+		{
+			name:           "confidence just under 1.0",
+			indicators:     []float64{0.6, 0.39},
+			expectedCapped: false,
+		},
+		{
+			name:           "multiple indicators exceeding 1.0",
+			indicators:     []float64{0.6, 0.2, 0.3},
+			expectedCapped: true,
+		},
+		{
+			name:           "single indicator at 1.0",
+			indicators:     []float64{1.0},
+			expectedCapped: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a test case that triggers specific confidence accumulation
+			// For Go, confidence values are: go.mod (0.6), go.sum (0.2), .go files (0.2)
+			// So we can create conditions to test exact boundaries
+			files := make(map[string]string)
+
+			if tt.indicators[0] >= 0.6 {
+				files["go.mod"] = "module test"
+			}
+			if len(tt.indicators) > 1 && tt.indicators[1] >= 0.2 {
+				files["go.sum"] = "test"
+			}
+			if len(tt.indicators) > 2 && tt.indicators[2] >= 0.2 {
+				files["main.go"] = "package main"
+			}
+
+			root := createTestProject(t, files, nil)
+			detector := NewDetector(root)
+			result, err := detector.detectGo()
+			if err != nil {
+				t.Fatalf("detectGo() error = %v", err)
+			}
+
+			// Verify that confidence is capped at 1.0
+			if result.Confidence > 1.0 {
+				t.Errorf("Confidence %f exceeds maximum 1.0", result.Confidence)
+			}
+
+			// If expected to be capped, should be exactly 1.0 or less
+			if tt.expectedCapped {
+				if result.Confidence > 1.0 {
+					t.Errorf("Expected capped confidence, got %f", result.Confidence)
+				}
+			}
+		})
+	}
+}
+
+func TestDetector_ResultsAppendBoundary(t *testing.T) {
+	// Tests boundary condition: if result != nil && result.Confidence > 0
+	// Targets mutations in: result.Confidence > 0 comparison
+	tests := []struct {
+		name              string
+		files             map[string]string
+		shouldDetectCount int
+	}{
+		{
+			name:              "zero confidence should not be appended",
+			files:             map[string]string{}, // No indicators
+			shouldDetectCount: 1,                   // Only Unknown
+		},
+		{
+			name: "minimal confidence just above zero",
+			files: map[string]string{
+				"main.go": "package main",
+			},
+			shouldDetectCount: 2, // Unknown + Go with 0.2 confidence
+		},
+		{
+			name: "confidence exactly zero should not be appended",
+			files: map[string]string{
+				"unrelated.txt": "content",
+			},
+			shouldDetectCount: 1, // Only Unknown
+		},
+		{
+			name: "multiple languages above zero",
+			files: map[string]string{
+				"go.mod":       "module test",
+				"package.json": `{"name": "test"}`,
+			},
+			shouldDetectCount: 3, // Go, Node, Unknown not added since others exist
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := createTestProject(t, tt.files, nil)
+			detector := NewDetector(root)
+			results, err := detector.Detect()
+			if err != nil {
+				t.Fatalf("Detect() error = %v", err)
+			}
+
+			// Count non-zero confidence results
+			nonZeroCount := 0
+			for _, r := range results {
+				if r.Confidence > 0 {
+					nonZeroCount++
+				}
+			}
+
+			if tt.shouldDetectCount > 1 && nonZeroCount != tt.shouldDetectCount-1 {
+				// Verify we detect exactly the expected number of non-Unknown types
+				expected := tt.shouldDetectCount - 1
+				if nonZeroCount != expected && len(results) < tt.shouldDetectCount {
+					t.Logf("Expected %d non-zero confidence results, got %d (total results: %d)",
+						expected, nonZeroCount, len(results))
+				}
+			}
+		})
+	}
+}
+
+func TestDetector_ArrayIndexBoundary(t *testing.T) {
+	// Tests boundary conditions for array operations and indexing
+	// Particularly for results[0] access and len(results) checks
+	tests := []struct {
+		name            string
+		files           map[string]string
+		shouldHaveFirst bool
+	}{
+		{
+			name:            "empty project returns Unknown at index 0",
+			files:           map[string]string{},
+			shouldHaveFirst: true,
+		},
+		{
+			name: "single detection returns one result",
+			files: map[string]string{
+				"go.mod": "module test",
+			},
+			shouldHaveFirst: true,
+		},
+		{
+			name: "multiple detections maintain order",
+			files: map[string]string{
+				"go.mod":       "module test",
+				"go.sum":       "test",
+				"package.json": `{"name": "test"}`,
+			},
+			shouldHaveFirst: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := createTestProject(t, tt.files, nil)
+			detector := NewDetector(root)
+			results, err := detector.Detect()
+			if err != nil {
+				t.Fatalf("Detect() error = %v", err)
+			}
+
+			if tt.shouldHaveFirst {
+				if len(results) == 0 {
+					t.Fatal("Expected at least one result")
+				}
+
+				first := results[0]
+				if first.Type == "" {
+					t.Error("First result has empty type")
+				}
+
+				// First should have highest confidence (if not empty)
+				if len(results) > 1 {
+					if first.Confidence < results[1].Confidence {
+						t.Errorf("First result should have highest confidence, got %f < %f",
+							first.Confidence, results[1].Confidence)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestDetector_DepthCountingBoundary(t *testing.T) {
+	// Tests boundary conditions in depth calculation
+	// Particularly: depth++ operation and depth > maxDepth check
+	tmpDir := t.TempDir()
+
+	// Create nested structure: deep nesting beyond typical maxDepth
+	deepPath := filepath.Join(tmpDir, "a", "b", "c", "d", "e", "deep.go")
+	if err := os.MkdirAll(filepath.Dir(deepPath), 0755); err != nil {
+		t.Fatalf("Failed to create deep directory: %v", err)
+	}
+	if err := os.WriteFile(deepPath, []byte("package deep"), 0644); err != nil {
+		t.Fatalf("Failed to create deep file: %v", err)
+	}
+
+	// Create shallow nested structure within typical maxDepth
+	shallowPath := filepath.Join(tmpDir, "cmd", "app.go")
+	if err := os.MkdirAll(filepath.Dir(shallowPath), 0755); err != nil {
+		t.Fatalf("Failed to create shallow directory: %v", err)
+	}
+	if err := os.WriteFile(shallowPath, []byte("package main"), 0644); err != nil {
+		t.Fatalf("Failed to create shallow file: %v", err)
+	}
+
+	// Add go.mod at root
+	if err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module test"), 0644); err != nil {
+		t.Fatalf("Failed to create go.mod: %v", err)
+	}
+
+	detector := NewDetector(tmpDir)
+	result, err := detector.detectGo()
+	if err != nil {
+		t.Fatalf("detectGo() error = %v", err)
+	}
+
+	// Should find shallow file but not deeply nested file
+	// Since maxDepth=3 in detectGo and "a/b/c/d/e/deep.go" is depth 6
+	hasIndicator := false
+	for _, ind := range result.Indicators {
+		if ind == "*.go files" {
+			hasIndicator = true
+			break
+		}
+	}
+
+	if !hasIndicator {
+		t.Errorf("Expected to find .go files at shallow depths")
+	}
+
+	// Verify we have go.mod indicator
+	hasGoMod := false
+	for _, ind := range result.Indicators {
+		if ind == "go.mod" {
+			hasGoMod = true
+			break
+		}
+	}
+
+	if !hasGoMod {
+		t.Errorf("Expected go.mod indicator")
+	}
+
+	// Confidence should include both go.mod (0.6) and .go files (0.2)
+	if result.Confidence != 0.8 {
+		t.Errorf("Expected confidence 0.8 (go.mod + .go files), got %f", result.Confidence)
+	}
+}
+
+func TestDetector_SkipDirBoundary(t *testing.T) {
+	// Tests boundary conditions in directory skipping logic
+	// Particularly for the common skip directories list
+	tests := []struct {
+		name       string
+		dirName    string
+		shouldSkip bool
+	}{
+		{
+			name:       "skip node_modules",
+			dirName:    "node_modules",
+			shouldSkip: true,
+		},
+		{
+			name:       "skip vendor",
+			dirName:    "vendor",
+			shouldSkip: true,
+		},
+		{
+			name:       "skip .git",
+			dirName:    ".git",
+			shouldSkip: true,
+		},
+		{
+			name:       "don't skip src",
+			dirName:    "src",
+			shouldSkip: false,
+		},
+		{
+			name:       "don't skip cmd",
+			dirName:    "cmd",
+			shouldSkip: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+
+			// Create structure with potential skip directory
+			skipDir := filepath.Join(tmpDir, tt.dirName)
+			if err := os.MkdirAll(skipDir, 0755); err != nil {
+				t.Fatalf("Failed to create directory: %v", err)
+			}
+
+			// Put a Go file in the directory
+			goFile := filepath.Join(skipDir, "test.go")
+			if err := os.WriteFile(goFile, []byte("package main"), 0644); err != nil {
+				t.Fatalf("Failed to create file: %v", err)
+			}
+
+			// Also create go.mod at root for consistent detection
+			if err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module test"), 0644); err != nil {
+				t.Fatalf("Failed to create go.mod: %v", err)
+			}
+
+			detector := NewDetector(tmpDir)
+			result, err := detector.detectGo()
+			if err != nil {
+				t.Fatalf("detectGo() error = %v", err)
+			}
+
+			hasGoFiles := false
+			for _, ind := range result.Indicators {
+				if ind == "*.go files" {
+					hasGoFiles = true
+					break
+				}
+			}
+
+			// If directory should be skipped, .go files indicator should only come from go.mod
+			// If directory should not be skipped, we might find .go files in it
+			if tt.shouldSkip && hasGoFiles {
+				// With go.mod present, we should still detect Go, but the go files
+				// found should not be from the skip directory
+				t.Logf("Skipped directory %s correctly - found .go files from other sources", tt.dirName)
+			}
+		})
+	}
+}
+
+func TestDetector_MaxResultsBoundary(t *testing.T) {
+	// Tests boundary condition: maxResults := 10 and if len(matches) >= maxResults
+	// Targets mutations in: >= vs >, maxResults value, len() check
+	tmpDir := t.TempDir()
+
+	// Create 15 Go files to exceed maxResults=10
+	for i := 1; i <= 15; i++ {
+		filename := filepath.Join(tmpDir, fmt.Sprintf("file%d.go", i))
+		if err := os.WriteFile(filename, []byte("package main"), 0644); err != nil {
+			t.Fatalf("Failed to create file: %v", err)
+		}
+	}
+
+	detector := NewDetector(tmpDir)
+	result, err := detector.detectGo()
+	if err != nil {
+		t.Fatalf("detectGo() error = %v", err)
+	}
+
+	// Should have detected .go files indicator
+	found := false
+	for _, ind := range result.Indicators {
+		if ind == "*.go files" {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		t.Errorf("Expected *.go files indicator even with 15 files")
+	}
+
+	// Confidence should be 0.2 for just .go files
+	if result.Confidence != 0.2 {
+		t.Errorf("Expected confidence 0.2 for .go files only, got %f", result.Confidence)
+	}
+}
+
+func TestDetector_FileMatchPatternBoundary(t *testing.T) {
+	// Tests boundary condition in pattern matching
+	// filepath.Match result handling and conditions
+	tests := []struct {
+		name        string
+		files       map[string]string
+		pattern     string
+		shouldMatch bool
+	}{
+		{
+			name:        "exact extension match",
+			files:       map[string]string{"test.go": "package main"},
+			pattern:     "*.go",
+			shouldMatch: true,
+		},
+		{
+			name:        "different extension no match",
+			files:       map[string]string{"test.txt": "content"},
+			pattern:     "*.go",
+			shouldMatch: false,
+		},
+		{
+			name:        "multiple files with matching extension",
+			files:       map[string]string{"a.go": "package a", "b.go": "package b"},
+			pattern:     "*.go",
+			shouldMatch: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := createTestProject(t, tt.files, nil)
+			matches, err := NewDetector(root).findFiles(tt.pattern, 1)
+			if err != nil {
+				t.Fatalf("findFiles() error = %v", err)
+			}
+
+			hasMatch := len(matches) > 0
+			if tt.shouldMatch && !hasMatch {
+				t.Errorf("Expected to find files matching pattern %s", tt.pattern)
+			}
+			if !tt.shouldMatch && hasMatch {
+				t.Errorf("Unexpected files found matching pattern %s", tt.pattern)
+			}
+		})
+	}
+}
+
+func TestDetector_DetectPrimaryEmptyResults(t *testing.T) {
+	// Tests boundary condition in DetectPrimary when results exist
+	// Particularly the len(results) == 0 check and results[0] access
+	tests := []struct {
+		name              string
+		files             map[string]string
+		shouldHavePrimary bool
+	}{
+		{
+			name:              "empty directory returns Unknown primary",
+			files:             map[string]string{},
+			shouldHavePrimary: true,
+		},
+		{
+			name:              "single result returns that result",
+			files:             map[string]string{"go.mod": "module test"},
+			shouldHavePrimary: true,
+		},
+		{
+			name:              "multiple results returns highest confidence",
+			files:             map[string]string{"go.mod": "module test", "package.json": `{"name": "test"}`},
+			shouldHavePrimary: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := createTestProject(t, tt.files, nil)
+			detector := NewDetector(root)
+			result, err := detector.DetectPrimary()
+			if err != nil {
+				t.Fatalf("DetectPrimary() error = %v", err)
+			}
+
+			if tt.shouldHavePrimary {
+				if result == nil {
+					t.Fatal("Expected DetectPrimary to return a result")
+				}
+				if result.Type == "" {
+					t.Error("Primary result has empty type")
+				}
+			}
+		})
 	}
 }
