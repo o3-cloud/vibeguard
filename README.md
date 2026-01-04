@@ -769,7 +769,7 @@ Contributions are welcome! Please:
 
 ## License
 
-VibeGuard is released under [LICENSE_NAME] (see LICENSE file for details).
+VibeGuard is released under the Apache License 2.0 (see LICENSE file for details).
 
 ## Further Reading
 
