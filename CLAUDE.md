@@ -43,6 +43,11 @@ Major architectural decisions are documented as Architecture Decision Records (A
   - Complements ADR-004 coverage requirements by identifying weak or missing assertions
   - YAML-based configuration with PR-diff support for faster CI feedback
 
+- **[ADR-008: Adopt actionlint for GitHub Actions Workflow Validation](docs/adr/ADR-008-adopt-actionlint.md)**
+  - Decision to use actionlint for validating GitHub Actions workflows in CI/CD pipelines
+  - Catches deprecated actions, syntax errors, and unsafe shell interpolation in workflows
+  - Extends code quality standards (ADR-004) to infrastructure code and demonstrates VibeGuard policy enforcement (ADR-005)
+
 ## Project Skills
 
 The `.claude/skills/` directory contains Claude Code skills that automate common workflows:

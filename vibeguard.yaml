@@ -18,6 +18,13 @@ checks:
     fix: "Fix the formatting issues"
     timeout: 5s
 
+  - id: actionlint
+    run: actionlint
+    severity: error
+    suggestion: "GitHub Actions workflows have validation errors (deprecated actions, syntax errors, or unsafe shell interpolation)"
+    fix: "Review actionlint output and fix the reported issues"
+    timeout: 10s
+
   - id: lint
     run: golangci-lint run {{.go_packages}}
     severity: error
