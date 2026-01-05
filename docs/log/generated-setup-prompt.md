@@ -23,7 +23,7 @@ generate a valid configuration.
 
 ### Project Structure:
 - Source directories: internal
-- Test directories: internal/assert, internal/cli, internal/cli/assist, internal/cli/inspector, internal/cli/templates, internal/config, internal/executor, internal/grok, internal/orchestrator, internal/output
+- Test directories: cmd/vibeguard, internal/assert, internal/cli, internal/cli/assist, internal/cli/inspector, internal/cli/templates, internal/config, internal/executor, internal/grok, internal/orchestrator, internal/output
 - Entry points: cmd/vibeguard/main.go
 
 ### Build System:
