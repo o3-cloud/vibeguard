@@ -219,7 +219,7 @@ checks:
 | `version` | Yes | string | Config format version | — |
 | `vars` | No | map[string]string | Global variables for interpolation | — |
 | `checks` | Yes | array | List of checks to run | — |
-| `id` | Yes (per check) | string | Unique check identifier | — |
+| `id` | Yes (per check) | string | Unique check identifier. Must start with a letter or underscore, followed by alphanumeric characters, underscores, or hyphens (regex: `^[a-zA-Z_][a-zA-Z0-9_-]*$`) | — |
 | `run` | Yes (per check) | string | Shell command with optional `{{.var}}` interpolation | — |
 | `grok` | No | array[string] | Grok patterns to extract data from command output | — |
 | `file` | No | string | File path to read output from instead of command stdout | — |

@@ -289,6 +289,7 @@ When generating a vibeguard.yaml configuration, DO NOT:
 ### Check Definitions
 - DO NOT create checks for tools not detected in the project
 - DO NOT use empty strings for required fields (id, run)
+- DO NOT use invalid check IDs (must match ^[a-zA-Z_][a-zA-Z0-9_-]*$ - start with letter or underscore, then alphanumeric/underscore/hyphen)
 - DO NOT use duplicate check IDs
 - DO NOT reference undefined variables
 - DO NOT create circular dependencies in requires
