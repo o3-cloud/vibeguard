@@ -1919,3 +1919,435 @@ func TestRun_FileField_WithoutGrok_StillReads(t *testing.T) {
 		t.Error("expected check to pass (exit 0, no grok patterns)")
 	}
 }
+
+// Race condition tests - run with `go test -race`
+// These tests are designed to detect data races under concurrent execution.
+
+func TestRun_Race_ManyParallelChecks(t *testing.T) {
+	// Stress test: many checks running in parallel to expose race conditions
+	// in shared state access (passedChecks, levelResults, levelViolations)
+	checks := make([]config.Check, 20)
+	for i := 0; i < 20; i++ {
+		checks[i] = config.Check{
+			ID:       "check-" + string(rune('a'+i)),
+			Run:      "exit 0",
+			Severity: config.SeverityError,
+		}
+	}
+
+	cfg := &config.Config{
+		Version: "1",
+		Checks:  checks,
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 10, false, false, "", 1) // High parallelism
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(result.Results) != 20 {
+		t.Errorf("expected 20 results, got %d", len(result.Results))
+	}
+}
+
+func TestRun_Race_ParallelFailuresUpdateSharedState(t *testing.T) {
+	// Multiple checks failing simultaneously should safely update levelViolations
+	checks := make([]config.Check, 10)
+	for i := 0; i < 10; i++ {
+		checks[i] = config.Check{
+			ID:         "fail-" + string(rune('a'+i)),
+			Run:        "exit 1",
+			Severity:   config.SeverityWarning,
+			Suggestion: "Fix check " + string(rune('a'+i)),
+		}
+	}
+
+	cfg := &config.Config{
+		Version: "1",
+		Checks:  checks,
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 10, false, false, "", 1) // All 10 run in parallel
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// All should fail and produce violations
+	if len(result.Violations) != 10 {
+		t.Errorf("expected 10 violations, got %d", len(result.Violations))
+	}
+
+	// Verify all violations are unique (no duplicates from race conditions)
+	seen := make(map[string]bool)
+	for _, v := range result.Violations {
+		if seen[v.CheckID] {
+			t.Errorf("duplicate violation for check %q (possible race condition)", v.CheckID)
+		}
+		seen[v.CheckID] = true
+	}
+}
+
+func TestRun_Race_FailFastWithManyParallelChecks(t *testing.T) {
+	// Test that fail-fast flag is safely set when multiple checks compete
+	checks := make([]config.Check, 10)
+	for i := 0; i < 10; i++ {
+		checks[i] = config.Check{
+			ID:       "check-" + string(rune('a'+i)),
+			Run:      "exit 1", // All fail
+			Severity: config.SeverityError,
+		}
+	}
+
+	cfg := &config.Config{
+		Version: "1",
+		Checks:  checks,
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 10, true, false, "", 1) // failFast = true
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Fail-fast should be triggered
+	if !result.FailFastTriggered {
+		t.Error("expected FailFastTriggered to be true")
+	}
+
+	// At least one check should have failed (the one that triggered fail-fast)
+	if len(result.Violations) < 1 {
+		t.Error("expected at least 1 violation")
+	}
+}
+
+func TestRun_Race_PassedChecksMapConcurrentAccess(t *testing.T) {
+	// Test that passedChecks map is safely accessed when multiple checks
+	// complete at the same time and their dependents start checking
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			// Level 0: 5 independent checks running in parallel
+			{ID: "a", Run: "exit 0", Severity: config.SeverityError},
+			{ID: "b", Run: "exit 0", Severity: config.SeverityError},
+			{ID: "c", Run: "exit 0", Severity: config.SeverityError},
+			{ID: "d", Run: "exit 0", Severity: config.SeverityError},
+			{ID: "e", Run: "exit 0", Severity: config.SeverityError},
+			// Level 1: Depends on all level 0 checks
+			{ID: "f", Run: "exit 0", Severity: config.SeverityError, Requires: []string{"a", "b", "c", "d", "e"}},
+			{ID: "g", Run: "exit 0", Severity: config.SeverityError, Requires: []string{"a", "b", "c", "d", "e"}},
+			{ID: "h", Run: "exit 0", Severity: config.SeverityError, Requires: []string{"a", "b", "c", "d", "e"}},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 8, false, false, "", 1) // High parallelism
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(result.Results) != 8 {
+		t.Errorf("expected 8 results, got %d", len(result.Results))
+	}
+
+	// All should pass
+	for _, r := range result.Results {
+		if !r.Passed {
+			t.Errorf("expected check %q to pass", r.Check.ID)
+		}
+	}
+}
+
+func TestRun_Race_MixedPassFailInSameLevel(t *testing.T) {
+	// Test concurrent updates when some checks pass and some fail in parallel
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{ID: "pass1", Run: "exit 0", Severity: config.SeverityError},
+			{ID: "fail1", Run: "exit 1", Severity: config.SeverityWarning},
+			{ID: "pass2", Run: "exit 0", Severity: config.SeverityError},
+			{ID: "fail2", Run: "exit 1", Severity: config.SeverityWarning},
+			{ID: "pass3", Run: "exit 0", Severity: config.SeverityError},
+			{ID: "fail3", Run: "exit 1", Severity: config.SeverityWarning},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 6, false, false, "", 1) // All run in parallel
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(result.Results) != 6 {
+		t.Errorf("expected 6 results, got %d", len(result.Results))
+	}
+
+	// Count pass/fail
+	passCount := 0
+	failCount := 0
+	for _, r := range result.Results {
+		if r.Passed {
+			passCount++
+		} else {
+			failCount++
+		}
+	}
+
+	if passCount != 3 {
+		t.Errorf("expected 3 passing checks, got %d", passCount)
+	}
+	if failCount != 3 {
+		t.Errorf("expected 3 failing checks, got %d", failCount)
+	}
+	if len(result.Violations) != 3 {
+		t.Errorf("expected 3 violations, got %d", len(result.Violations))
+	}
+}
+
+func TestRun_Race_LevelResultsSliceIndexAssignment(t *testing.T) {
+	// Test that levelResults slice index assignment is safe
+	// (pre-allocated slice with direct index write, not append)
+	checks := make([]config.Check, 15)
+	for i := 0; i < 15; i++ {
+		// Alternate pass/fail to exercise both paths
+		exitCode := "0"
+		if i%2 == 1 {
+			exitCode = "1"
+		}
+		checks[i] = config.Check{
+			ID:       "check-" + string(rune('a'+i)),
+			Run:      "exit " + exitCode,
+			Severity: config.SeverityWarning,
+		}
+	}
+
+	cfg := &config.Config{
+		Version: "1",
+		Checks:  checks,
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 15, false, false, "", 1)
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(result.Results) != 15 {
+		t.Errorf("expected 15 results, got %d", len(result.Results))
+	}
+
+	// Verify no nil results (would indicate race in index assignment)
+	for i, r := range result.Results {
+		if r == nil {
+			t.Errorf("result at index %d is nil (possible race condition)", i)
+		}
+	}
+}
+
+func TestRun_Race_ContextCancellationDuringExecution(t *testing.T) {
+	// Test that context cancellation is handled safely with concurrent checks
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{ID: "a", Run: "sleep 0.05", Severity: config.SeverityError},
+			{ID: "b", Run: "sleep 0.05", Severity: config.SeverityError},
+			{ID: "c", Run: "sleep 0.05", Severity: config.SeverityError},
+			{ID: "d", Run: "sleep 0.05", Severity: config.SeverityError},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 4, false, false, "", 1)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+
+	_, err := orch.Run(ctx)
+	// Context cancellation may or may not produce an error depending on timing
+	// The important thing is no panic or race condition occurs
+	_ = err
+}
+
+func TestRun_Race_DependencySkipConcurrentAccess(t *testing.T) {
+	// Test that dependency checking and skipping is safe under concurrency
+	// When a check fails, its dependents should be skipped atomically
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			// Level 0: Some pass, some fail
+			{ID: "pass-a", Run: "exit 0", Severity: config.SeverityError},
+			{ID: "fail-b", Run: "exit 1", Severity: config.SeverityError},
+			{ID: "pass-c", Run: "exit 0", Severity: config.SeverityError},
+			{ID: "fail-d", Run: "exit 1", Severity: config.SeverityError},
+			// Level 1: Various dependencies
+			{ID: "dep-on-a", Run: "exit 0", Severity: config.SeverityError, Requires: []string{"pass-a"}},
+			{ID: "dep-on-b", Run: "exit 0", Severity: config.SeverityError, Requires: []string{"fail-b"}},            // Should be skipped
+			{ID: "dep-on-cd", Run: "exit 0", Severity: config.SeverityError, Requires: []string{"pass-c", "fail-d"}}, // Should be skipped
+			{ID: "dep-on-ac", Run: "exit 0", Severity: config.SeverityError, Requires: []string{"pass-a", "pass-c"}},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 8, false, false, "", 1)
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Count results
+	skipped := 0
+	for _, r := range result.Results {
+		if r.Execution.ExitCode == -1 {
+			skipped++
+		}
+	}
+
+	// dep-on-b and dep-on-cd should be skipped
+	if skipped != 2 {
+		t.Errorf("expected 2 skipped checks, got %d", skipped)
+	}
+}
+
+func TestRun_Race_RepeatedExecution(t *testing.T) {
+	// Run the same orchestrator multiple times to detect intermittent races
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{ID: "a", Run: "exit 0", Severity: config.SeverityError},
+			{ID: "b", Run: "exit 1", Severity: config.SeverityWarning},
+			{ID: "c", Run: "exit 0", Severity: config.SeverityError, Requires: []string{"a"}},
+			{ID: "d", Run: "exit 0", Severity: config.SeverityError, Requires: []string{"b"}}, // Skipped
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 4, false, false, "", 1)
+
+	for i := 0; i < 10; i++ {
+		result, err := orch.Run(context.Background())
+		if err != nil {
+			t.Fatalf("iteration %d: unexpected error: %v", i, err)
+		}
+
+		if len(result.Results) != 4 {
+			t.Errorf("iteration %d: expected 4 results, got %d", i, len(result.Results))
+		}
+	}
+}
+
+func TestRun_Race_FailFastCancelsInFlightChecks(t *testing.T) {
+	// Test that fail-fast properly cancels concurrent checks without races
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{ID: "quick-fail", Run: "exit 1", Severity: config.SeverityError},
+			{ID: "slow-1", Run: "sleep 5", Severity: config.SeverityError},
+			{ID: "slow-2", Run: "sleep 5", Severity: config.SeverityError},
+			{ID: "slow-3", Run: "sleep 5", Severity: config.SeverityError},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 4, true, false, "", 1) // failFast = true
+
+	start := time.Now()
+	result, err := orch.Run(context.Background())
+	duration := time.Since(start)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should complete quickly due to fail-fast cancellation
+	if duration > 2*time.Second {
+		t.Errorf("expected quick completion due to fail-fast, took %v", duration)
+	}
+
+	if !result.FailFastTriggered {
+		t.Error("expected FailFastTriggered to be true")
+	}
+}
+
+func TestRun_Race_HighConcurrencyWithDependencies(t *testing.T) {
+	// Complex test: many checks with dependencies under high concurrency
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			// Level 0
+			{ID: "l0-a", Run: "exit 0", Severity: config.SeverityError},
+			{ID: "l0-b", Run: "exit 0", Severity: config.SeverityError},
+			{ID: "l0-c", Run: "exit 0", Severity: config.SeverityError},
+			{ID: "l0-d", Run: "exit 0", Severity: config.SeverityError},
+			// Level 1
+			{ID: "l1-a", Run: "exit 0", Severity: config.SeverityError, Requires: []string{"l0-a", "l0-b"}},
+			{ID: "l1-b", Run: "exit 0", Severity: config.SeverityError, Requires: []string{"l0-b", "l0-c"}},
+			{ID: "l1-c", Run: "exit 0", Severity: config.SeverityError, Requires: []string{"l0-c", "l0-d"}},
+			// Level 2
+			{ID: "l2-a", Run: "exit 0", Severity: config.SeverityError, Requires: []string{"l1-a", "l1-b"}},
+			{ID: "l2-b", Run: "exit 0", Severity: config.SeverityError, Requires: []string{"l1-b", "l1-c"}},
+			// Level 3
+			{ID: "l3-a", Run: "exit 0", Severity: config.SeverityError, Requires: []string{"l2-a", "l2-b"}},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 4, false, false, "", 1)
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(result.Results) != 10 {
+		t.Errorf("expected 10 results, got %d", len(result.Results))
+	}
+
+	// All should pass
+	for _, r := range result.Results {
+		if !r.Passed {
+			t.Errorf("expected check %q to pass", r.Check.ID)
+		}
+	}
+
+	// Verify execution order respects dependencies
+	indexByID := make(map[string]int)
+	for i, r := range result.Results {
+		indexByID[r.Check.ID] = i
+	}
+
+	verifyOrder := func(before, after string) {
+		if indexByID[before] >= indexByID[after] {
+			t.Errorf("%q should run before %q: %d >= %d", before, after, indexByID[before], indexByID[after])
+		}
+	}
+
+	// Verify level 0 runs before level 1
+	verifyOrder("l0-a", "l1-a")
+	verifyOrder("l0-b", "l1-a")
+	verifyOrder("l0-b", "l1-b")
+	verifyOrder("l0-c", "l1-b")
+	verifyOrder("l0-c", "l1-c")
+	verifyOrder("l0-d", "l1-c")
+	// Verify level 1 runs before level 2
+	verifyOrder("l1-a", "l2-a")
+	verifyOrder("l1-b", "l2-a")
+	verifyOrder("l1-b", "l2-b")
+	verifyOrder("l1-c", "l2-b")
+	// Verify level 2 runs before level 3
+	verifyOrder("l2-a", "l3-a")
+	verifyOrder("l2-b", "l3-a")
+}
