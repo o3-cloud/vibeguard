@@ -32,6 +32,13 @@ checks:
     fix: "Fix the linter issues"
     timeout: 5s
 
+  - id: staticcheck
+    run: staticcheck {{.go_packages}}
+    severity: error
+    suggestion: "staticcheck found issues in the codebase"
+    fix: "Fix the staticcheck issues"
+    timeout: 5s
+
   - id: test
     run: go test -race {{.go_packages}}
     severity: warning

@@ -83,7 +83,7 @@ func TestFormatJSON_WithViolations(t *testing.T) {
 				Extracted:  map[string]string{"coverage": "72"},
 			},
 		},
-		ExitCode: executor.ExitCodeViolation, //nolint:staticcheck // Testing legacy exit code behavior
+		ExitCode: 1, // Default error exit code
 	}
 
 	err := FormatJSON(&buf, result)
@@ -117,8 +117,8 @@ func TestFormatJSON_WithViolations(t *testing.T) {
 	if output.Violations[0].Extracted["coverage"] != "72" {
 		t.Errorf("expected extracted coverage '72', got %s", output.Violations[0].Extracted["coverage"])
 	}
-	if output.ExitCode != executor.ExitCodeViolation { //nolint:staticcheck // Testing legacy exit code behavior
-		t.Errorf("expected exit code %d, got %d", executor.ExitCodeViolation, output.ExitCode) //nolint:staticcheck // Testing legacy exit code behavior
+	if output.ExitCode != 1 { // Default error exit code
+		t.Errorf("expected exit code %d, got %d", 1, output.ExitCode)
 	}
 }
 
@@ -169,7 +169,7 @@ func TestFormatJSON_CancelledStatus(t *testing.T) {
 			},
 		},
 		Violations: nil,
-		ExitCode:   executor.ExitCodeTimeout, //nolint:staticcheck // Testing legacy exit code behavior
+		ExitCode:   1, // Default error exit code
 	}
 
 	err := FormatJSON(&buf, result)
@@ -191,8 +191,8 @@ func TestFormatJSON_CancelledStatus(t *testing.T) {
 	if output.Checks[1].ID != "vet" || output.Checks[1].Status != "cancelled" {
 		t.Errorf("expected check[1] status to be 'cancelled', got: %+v", output.Checks[1])
 	}
-	if output.ExitCode != executor.ExitCodeTimeout { //nolint:staticcheck // Testing legacy exit code behavior
-		t.Errorf("expected exit code %d, got %d", executor.ExitCodeTimeout, output.ExitCode) //nolint:staticcheck // Testing legacy exit code behavior
+	if output.ExitCode != 1 { // Default error exit code
+		t.Errorf("expected exit code %d, got %d", 1, output.ExitCode)
 	}
 }
 
@@ -217,7 +217,7 @@ func TestFormatJSON_WithFixField(t *testing.T) {
 				Extracted:  map[string]string{"coverage": "72"},
 			},
 		},
-		ExitCode: executor.ExitCodeViolation, //nolint:staticcheck // Testing legacy exit code behavior
+		ExitCode: 1, // Default error exit code
 	}
 
 	err := FormatJSON(&buf, result)
