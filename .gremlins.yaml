@@ -3,7 +3,7 @@
 
 unleash:
   workers: 4
-  timeout-coefficient: 10
+  timeout-coefficient: 2
 
   # Enable key mutation operators
   arithmetic-base: true

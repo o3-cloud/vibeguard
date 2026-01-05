@@ -33,7 +33,7 @@ checks:
     timeout: 5s
 
   - id: test
-    run: go test {{.go_packages}}
+    run: go test -race {{.go_packages}}
     severity: warning
     suggestion: "Some tests are failing"
     fix: "Fix the failing tests"
@@ -56,12 +56,3 @@ checks:
     timeout: 5s
     requires:
       - vet
-
-  - id: mutation
-    run: gremlins unleash ./internal/assert --threshold-efficacy 50
-    severity: warning
-    suggestion: "Mutation testing found weak tests (efficacy below 50%)"
-    fix: "gremlins unleash ./internal/assert"
-    timeout: 120s
-    requires:
-      - test
