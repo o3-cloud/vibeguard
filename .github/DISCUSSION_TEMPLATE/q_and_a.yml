@@ -1,0 +1,60 @@
+title: "[Q&A] "
+labels:
+  - question
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for asking a question! Please fill out the sections below to help us understand your question.
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: What would you like to know?
+      placeholder: Describe your question clearly
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Provide any relevant context or background information
+      placeholder: |
+        - What are you trying to accomplish?
+        - What have you already tried?
+
+  - type: textarea
+    id: configuration
+    attributes:
+      label: Configuration (if applicable)
+      description: Share your vibeguard.yaml if relevant
+      render: yaml
+
+  - type: input
+    id: version
+    attributes:
+      label: VibeGuard Version
+      description: Run `vibeguard --version`
+      placeholder: "0.1.0"
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      options:
+        - Linux
+        - macOS
+        - Windows
+        - Other
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Before submitting
+      options:
+        - label: I have searched existing discussions and issues
+          required: true
+        - label: I have checked the documentation
+          required: true

@@ -1,0 +1,56 @@
+title: "[Idea] "
+labels:
+  - idea
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Share your ideas for improving VibeGuard! We value community input on new features and enhancements.
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: Idea Summary
+      description: Briefly describe your idea
+      placeholder: What's your idea?
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or Use Case
+      description: What problem does this solve? What use case does it enable?
+      placeholder: |
+        - What are you trying to accomplish?
+        - Why is this difficult or impossible today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: How do you envision this working?
+      placeholder: Describe your proposed solution
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Have you considered any alternative approaches?
+
+  - type: textarea
+    id: examples
+    attributes:
+      label: Examples
+      description: Share examples, mockups, or references if helpful
+      render: yaml
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Before submitting
+      options:
+        - label: I have searched existing discussions and issues for similar ideas
+          required: true

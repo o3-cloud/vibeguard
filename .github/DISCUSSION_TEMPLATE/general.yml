@@ -1,0 +1,42 @@
+title: "[Discussion] "
+labels:
+  - discussion
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Start a general discussion about VibeGuard, policy enforcement, or related topics.
+
+  - type: textarea
+    id: topic
+    attributes:
+      label: Topic
+      description: What would you like to discuss?
+      placeholder: Describe the topic of discussion
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Provide any relevant context or background
+      placeholder: |
+        - Why is this topic important?
+        - What prompted this discussion?
+
+  - type: textarea
+    id: questions
+    attributes:
+      label: Discussion Points
+      description: What specific points or questions would you like to explore?
+      placeholder: |
+        - Point 1
+        - Point 2
+        - Question 1
+
+  - type: textarea
+    id: related
+    attributes:
+      label: Related Resources
+      description: Link any related issues, PRs, or external resources

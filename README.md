@@ -779,8 +779,10 @@ VibeGuard is released under the Apache License 2.0 (see LICENSE file for details
 
 ## Support
 
-For issues, questions, or suggestions:
+For help with VibeGuard:
 
-- Open an issue on GitHub
-- Check existing ADRs and documentation
-- Review the implementation patterns in `docs/patterns/`
+- **Questions & Discussions:** [GitHub Discussions](https://github.com/vibeguard/vibeguard/discussions)
+- **Bug Reports:** [GitHub Issues](https://github.com/vibeguard/vibeguard/issues)
+- **Security Issues:** See [SECURITY.md](SECURITY.md)
+
+For detailed support information including response time SLAs, see [SUPPORT.md](SUPPORT.md).

@@ -1,0 +1,52 @@
+title: "[Show & Tell] "
+labels:
+  - showcase
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Share how you're using VibeGuard! We love seeing creative configurations, integrations, and use cases.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: What are you sharing?
+      description: Briefly describe what you've built or configured
+      placeholder: I created a VibeGuard configuration that...
+    validations:
+      required: true
+
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+      description: Explain how it works and why you built it
+      placeholder: |
+        - What problem does it solve?
+        - How is it configured?
+        - Any interesting patterns or tricks?
+    validations:
+      required: true
+
+  - type: textarea
+    id: configuration
+    attributes:
+      label: Configuration
+      description: Share your configuration (sanitize any sensitive values)
+      render: yaml
+
+  - type: textarea
+    id: lessons
+    attributes:
+      label: Lessons Learned
+      description: What did you learn? Any tips for others?
+      placeholder: |
+        - What worked well?
+        - What would you do differently?
+        - Any gotchas to watch out for?
+
+  - type: textarea
+    id: resources
+    attributes:
+      label: Additional Resources
+      description: Links to blog posts, repos, or other resources
