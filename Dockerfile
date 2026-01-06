@@ -30,8 +30,13 @@ RUN ARCH=$(dpkg --print-architecture) && \
 # Set up non-root user (security best practice)
 RUN useradd -m -s /bin/bash claude
 
-# Stay as root for final setup
-WORKDIR /root
+# Switch to non-root user for default execution
+USER claude
+WORKDIR /home/claude
 
-# Set up PATH for installed tools
+# Set up PATH for installed tools (add to user's PATH)
 ENV PATH="/usr/local/bin:${PATH}"
+
+# Health check to ensure Beads CLI is available
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD /usr/local/bin/bd --version > /dev/null || exit 1
