@@ -1,0 +1,78 @@
+services:
+  vibeguard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: vibeguard:latest
+    container_name: vibeguard-dev
+
+    # Set user context to claude (non-root)
+    user: "${UID:-1000}:${GID:-1000}"
+
+    # Mount project directory for development
+    volumes:
+      # Project root - read-write for code changes
+      - .:/work
+
+      # Beads database - persistent across sessions
+      - ./.beads:/work/.beads
+
+      # Git directory - read-write for version control
+      - ./.git:/work/.git
+
+      # Optional: Mount SSH credentials for git operations
+      # Uncomment if you need SSH access for git operations
+      # - ~/.ssh:/home/claude/.ssh:ro
+
+      # Optional: Mount gitconfig for git user configuration
+      # Uncomment if you need git user settings
+      # - ~/.gitconfig:/home/claude/.gitconfig:ro
+
+    # Work directory
+    working_dir: /work
+
+    # Environment variables
+    environment:
+      # Beads configuration
+      BEADS_DB: /work/.beads/beads.db
+
+      # Claude Code configuration (optional)
+      # CLAUDE_CONFIG_DIR: /home/claude/.claude
+
+      # Development environment
+      TERM: xterm-256color
+
+      # Optional: Claude API key (set via .env or command line)
+      # ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+
+    # Standard input/output configuration
+    stdin_open: true
+    tty: true
+
+    # Health check
+    healthcheck:
+      test: [
+        "CMD",
+        "sh",
+        "-c",
+        "/usr/local/bin/bd --version > /dev/null && which claude > /dev/null"
+      ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+    # Default command - interactive shell
+    command: /bin/bash
+
+    # Keep container running
+    restart: unless-stopped
+
+    # Network configuration
+    networks:
+      - vibeguard-network
+
+# Network for service communication
+networks:
+  vibeguard-network:
+    driver: bridge
