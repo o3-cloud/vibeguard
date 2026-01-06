@@ -4,6 +4,15 @@ FROM ubuntu:24.04
 LABEL org.opencontainers.image.source="https://github.com/anthropics/vibeguard"
 LABEL org.opencontainers.image.description="Claude Code + Beads development environment"
 
+# Remove unnecessary packages to reduce attack surface
+# CVE-2025-68973 in gpgv identified as high-severity vulnerability
+# gpgv is not required by Beads or Claude Code CLI
+RUN apt-get update && \
+    apt-get remove -y --allow-remove-essential gpgv gpg-agent && \
+    apt-get autoremove -y && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
 # Install dependencies in one layer
 # Include libc6 explicitly to ensure runtime libraries are present
 RUN apt-get update && apt-get install -y --no-install-recommends \
