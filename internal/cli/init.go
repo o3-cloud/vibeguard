@@ -126,7 +126,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 	}
 
 	// Write the config
-	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte(content), 0600); err != nil {
 		return fmt.Errorf("failed to create config file: %w", err)
 	}
 
@@ -245,7 +245,7 @@ func runAssist(cmd *cobra.Command, args []string) error {
 	// Output the prompt
 	if initOutput != "" {
 		// Write to file
-		if err := os.WriteFile(initOutput, []byte(prompt), 0644); err != nil {
+		if err := os.WriteFile(initOutput, []byte(prompt), 0600); err != nil {
 			return &ExitError{
 				Code:    3,
 				Message: fmt.Sprintf("failed to write output file: %v", err),

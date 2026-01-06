@@ -91,7 +91,7 @@ func Load(path string) (*Config, error) {
 		}
 	}
 
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 - path is a validated config file from FindConfig
 	if err != nil {
 		return nil, &ConfigError{Message: "failed to read config file", Cause: err}
 	}

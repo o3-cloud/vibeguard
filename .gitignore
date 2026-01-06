@@ -39,3 +39,6 @@ bin/
 .vibeguard/
 
 spikes
+
+results.sh
+results.json

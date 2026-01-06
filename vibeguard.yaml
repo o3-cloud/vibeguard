@@ -63,3 +63,17 @@ checks:
     timeout: 5s
     requires:
       - vet
+
+  - id: gosec
+    run: gosec {{.go_packages}}
+    severity: error
+    suggestion: "gosec found security vulnerabilities"
+    fix: "Fix the security issues"
+    timeout: 30s
+
+  - id: docker
+    run: checkov -d . --framework dockerfile
+    severity: error
+    suggestion: checkov found issues in the Dockerfile
+    fix: "Fix the issues reported by checkov"
+    timeout: 30s

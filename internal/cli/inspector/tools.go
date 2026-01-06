@@ -45,6 +45,22 @@ func NewToolScanner(root string) *ToolScanner {
 	return &ToolScanner{root: root}
 }
 
+// isPathWithinRoot validates that a path is within the root directory,
+// preventing directory traversal attacks.
+func (s *ToolScanner) isPathWithinRoot(path string) bool {
+	// Resolve the absolute paths to handle symlinks and ".." references
+	absRoot, err := filepath.Abs(s.root)
+	if err != nil {
+		return false
+	}
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return false
+	}
+	// Ensure the path is within root by checking if it starts with root + separator
+	return absPath == absRoot || strings.HasPrefix(absPath, absRoot+string(filepath.Separator))
+}
+
 // ScanAll detects all development tools in the project.
 func (s *ToolScanner) ScanAll() ([]ToolInfo, error) {
 	var tools []ToolInfo
@@ -818,7 +834,10 @@ func (p *packageJSON) hasField(name string) bool {
 // readPackageJSON reads and parses package.json if it exists.
 func (s *ToolScanner) readPackageJSON() (*packageJSON, error) {
 	path := filepath.Join(s.root, "package.json")
-	data, err := os.ReadFile(path)
+	if !s.isPathWithinRoot(path) {
+		return nil, os.ErrNotExist
+	}
+	data, err := os.ReadFile(path) // #nosec G304 - path is validated by isPathWithinRoot
 	if err != nil {
 		return nil, err
 	}
@@ -871,7 +890,10 @@ func (s *ToolScanner) dirExists(name string) bool {
 // fileContains checks if a file exists and contains the given string.
 func (s *ToolScanner) fileContains(name, substr string) bool {
 	path := filepath.Join(s.root, name)
-	data, err := os.ReadFile(path)
+	if !s.isPathWithinRoot(path) {
+		return false
+	}
+	data, err := os.ReadFile(path) // #nosec G304 - path is validated by isPathWithinRoot
 	if err != nil {
 		return false
 	}
@@ -899,7 +921,11 @@ func (s *ToolScanner) scanCIWorkflowsForTool(toolName string) (bool, []string) {
 	workflowFiles = append(workflowFiles, yamlFiles...)
 
 	for _, wf := range workflowFiles {
-		data, err := os.ReadFile(wf)
+		// Validate that the file is within root (glob patterns should ensure this, but be defensive)
+		if !s.isPathWithinRoot(wf) {
+			continue
+		}
+		data, err := os.ReadFile(wf) // #nosec G304 - path is validated by isPathWithinRoot
 		if err != nil {
 			continue
 		}

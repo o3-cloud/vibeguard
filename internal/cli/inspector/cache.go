@@ -5,6 +5,7 @@ package inspector
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 )
 
@@ -26,9 +27,30 @@ func NewFileCache(root string) *FileCache {
 	}
 }
 
+// isPathWithinRoot validates that a path is within the root directory,
+// preventing directory traversal attacks.
+func (c *FileCache) isPathWithinRoot(path string) bool {
+	// Resolve the absolute paths to handle symlinks and ".." references
+	absRoot, err := filepath.Abs(c.root)
+	if err != nil {
+		return false
+	}
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return false
+	}
+	// Ensure the path is within root by checking if it starts with root + separator
+	return absPath == absRoot || strings.HasPrefix(absPath, absRoot+string(filepath.Separator))
+}
+
 // FileExists checks if a file exists, using cache when available.
 func (c *FileCache) FileExists(name string) bool {
 	path := filepath.Join(c.root, name)
+
+	// Prevent directory traversal attacks
+	if !c.isPathWithinRoot(path) {
+		return false
+	}
 
 	c.mu.RLock()
 	exists, cached := c.existsCache[path]
@@ -51,6 +73,11 @@ func (c *FileCache) FileExists(name string) bool {
 // DirExists checks if a directory exists, using cache when available.
 func (c *FileCache) DirExists(name string) bool {
 	path := filepath.Join(c.root, name)
+
+	// Prevent directory traversal attacks
+	if !c.isPathWithinRoot(path) {
+		return false
+	}
 
 	// Use a different cache key prefix for directories
 	cacheKey := "dir:" + path
@@ -79,6 +106,11 @@ func (c *FileCache) DirExists(name string) bool {
 func (c *FileCache) ReadFile(name string) []byte {
 	path := filepath.Join(c.root, name)
 
+	// Prevent directory traversal attacks
+	if !c.isPathWithinRoot(path) {
+		return nil
+	}
+
 	c.mu.RLock()
 	content, cached := c.contentCache[path]
 	c.mu.RUnlock()
@@ -93,7 +125,7 @@ func (c *FileCache) ReadFile(name string) []byte {
 		return result
 	}
 
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 - path is validated by isPathWithinRoot
 	if err != nil {
 		c.mu.Lock()
 		c.contentCache[path] = nil

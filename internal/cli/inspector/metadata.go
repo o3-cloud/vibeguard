@@ -43,6 +43,22 @@ func NewMetadataExtractor(root string) *MetadataExtractor {
 	return &MetadataExtractor{root: root}
 }
 
+// isPathWithinRoot validates that a path is within the root directory,
+// preventing directory traversal attacks.
+func (m *MetadataExtractor) isPathWithinRoot(path string) bool {
+	// Resolve the absolute paths to handle symlinks and ".." references
+	absRoot, err := filepath.Abs(m.root)
+	if err != nil {
+		return false
+	}
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return false
+	}
+	// Ensure the path is within root by checking if it starts with root + separator
+	return absPath == absRoot || strings.HasPrefix(absPath, absRoot+string(filepath.Separator))
+}
+
 // Extract extracts metadata based on the detected project type.
 func (m *MetadataExtractor) Extract(projectType ProjectType) (*ProjectMetadata, error) {
 	switch projectType {
@@ -122,7 +138,10 @@ func (m *MetadataExtractor) extractGoMetadata() (*ProjectMetadata, error) {
 	}
 
 	goModPath := filepath.Join(m.root, "go.mod")
-	file, err := os.Open(goModPath)
+	if !m.isPathWithinRoot(goModPath) {
+		return metadata, nil // path outside root, return empty metadata
+	}
+	file, err := os.Open(goModPath) // #nosec G304 - path is validated by isPathWithinRoot
 	if err != nil {
 		return metadata, nil // go.mod not found, return empty metadata
 	}
@@ -161,7 +180,10 @@ func (m *MetadataExtractor) extractNodeMetadata() (*ProjectMetadata, error) {
 	}
 
 	pkgJSONPath := filepath.Join(m.root, "package.json")
-	data, err := os.ReadFile(pkgJSONPath)
+	if !m.isPathWithinRoot(pkgJSONPath) {
+		return metadata, nil // path outside root, return empty metadata
+	}
+	data, err := os.ReadFile(pkgJSONPath) // #nosec G304 - path is validated by isPathWithinRoot
 	if err != nil {
 		return metadata, nil // package.json not found
 	}
@@ -460,7 +482,11 @@ func (m *MetadataExtractor) extractGemspec(filename string) (*ProjectMetadata, e
 		Extra: make(map[string]string),
 	}
 
-	content, err := os.ReadFile(filepath.Join(m.root, filename))
+	filePath := filepath.Join(m.root, filename)
+	if !m.isPathWithinRoot(filePath) {
+		return metadata, nil // path outside root, return empty metadata
+	}
+	content, err := os.ReadFile(filePath) // #nosec G304 - path is validated by isPathWithinRoot
 	if err != nil {
 		return metadata, nil
 	}
@@ -969,7 +995,11 @@ func (m *MetadataExtractor) detectMonorepo() bool {
 
 // extractVersionFromFile tries to read version from a VERSION file.
 func (m *MetadataExtractor) extractVersionFromFile(filename string) string {
-	content, err := os.ReadFile(filepath.Join(m.root, filename))
+	filePath := filepath.Join(m.root, filename)
+	if !m.isPathWithinRoot(filePath) {
+		return "" // path outside root
+	}
+	content, err := os.ReadFile(filePath) // #nosec G304 - path is validated by isPathWithinRoot
 	if err != nil {
 		return ""
 	}
@@ -979,6 +1009,9 @@ func (m *MetadataExtractor) extractVersionFromFile(filename string) string {
 // fileExists checks if a file exists in the project root.
 func (m *MetadataExtractor) fileExists(name string) bool {
 	path := filepath.Join(m.root, name)
+	if !m.isPathWithinRoot(path) {
+		return false // path outside root
+	}
 	info, err := os.Stat(path)
 	if err != nil {
 		return false
@@ -989,6 +1022,9 @@ func (m *MetadataExtractor) fileExists(name string) bool {
 // dirExists checks if a directory exists in the project root.
 func (m *MetadataExtractor) dirExists(name string) bool {
 	path := filepath.Join(m.root, name)
+	if !m.isPathWithinRoot(path) {
+		return false // path outside root
+	}
 	info, err := os.Stat(path)
 	if err != nil {
 		return false

@@ -101,7 +101,29 @@ func (o *Orchestrator) getAnalysisOutput(check *config.Check, execResult *execut
 	if check.File != "" {
 		// Interpolate variables in the file path
 		filePath := o.interpolatePath(check.File)
-		content, err := os.ReadFile(filePath)
+
+		// Validate that the file path doesn't escape the current directory (prevent directory traversal)
+		absPath, err := filepath.Abs(filePath)
+		if err != nil {
+			return "", fmt.Errorf("failed to resolve file path %q: %w", filePath, err)
+		}
+
+		wd, err := os.Getwd()
+		if err != nil {
+			return "", fmt.Errorf("failed to get working directory: %w", err)
+		}
+		absWd, err := filepath.Abs(wd)
+		if err != nil {
+			return "", fmt.Errorf("failed to resolve working directory: %w", err)
+		}
+
+		// Ensure the resolved path is within the working directory
+		relPath, err := filepath.Rel(absWd, absPath)
+		if err != nil || strings.HasPrefix(relPath, "..") {
+			return "", fmt.Errorf("file path %q is outside the working directory", filePath)
+		}
+
+		content, err := os.ReadFile(absPath) // #nosec G304 - path is validated to be within working directory
 		if err != nil {
 			return "", fmt.Errorf("failed to read file %q: %w", filePath, err)
 		}
@@ -545,10 +567,10 @@ func (o *Orchestrator) RunCheck(ctx context.Context, checkID string) (*RunResult
 
 // writeCheckLog writes check output to <logDir>/<check-id>.log
 func (o *Orchestrator) writeCheckLog(checkID, output string) error {
-	if err := os.MkdirAll(o.logDir, 0755); err != nil {
+	if err := os.MkdirAll(o.logDir, 0750); err != nil {
 		return err
 	}
 
 	logPath := filepath.Join(o.logDir, checkID+".log")
-	return os.WriteFile(logPath, []byte(output), 0644)
+	return os.WriteFile(logPath, []byte(output), 0600)
 }
