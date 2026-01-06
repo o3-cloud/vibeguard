@@ -46,11 +46,54 @@ jobs:
             type=raw,value=latest
             type=raw,value=monthly-rebuild-${{ github.run_number }}
 
-      - name: Build and push Docker image
+      - name: Build Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
-          push: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+          push: false
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository }}:buildcache
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository }}:buildcache,mode=max
+          outputs: type=docker,dest=/tmp/image.tar
+
+      - name: Scan image with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          input: /tmp/image.tar
+          format: sarif
+          output: trivy-results.sarif
+          severity: HIGH,CRITICAL
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy-container-scan
+
+      - name: Generate SBOM with Syft
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ steps.meta.outputs.tags }}
+          format: cyclonedx-json
+          output-file: sbom.json
+
+      - name: Check vulnerability scan results
+        run: |
+          if trivy image --input /tmp/image.tar --exit-code 1 --severity HIGH,CRITICAL > /dev/null 2>&1; then
+            echo "❌ HIGH or CRITICAL vulnerabilities found in image"
+            trivy image --input /tmp/image.tar --severity HIGH,CRITICAL
+            exit 1
+          fi
+          echo "✅ Image vulnerability scan passed (no HIGH/CRITICAL vulnerabilities)"
+
+      - name: Push Docker image
+        if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && success()
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=registry,ref=ghcr.io/${{ github.repository }}:buildcache
@@ -71,4 +114,9 @@ jobs:
             else
               echo "**Status**: ❌ Failed"
             fi
+            echo ""
+            echo "### Security Scanning"
+            echo "- **Vulnerability Scan**: Trivy image scan (HIGH/CRITICAL severity)"
+            echo "- **SBOM**: Generated with Syft (CycloneDX format)"
+            echo "- **GitHub Security**: Results uploaded to Security tab"
           } >> "$GITHUB_STEP_SUMMARY"

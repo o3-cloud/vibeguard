@@ -29,3 +29,21 @@ jobs:
 
       - name: Run vibeguard checks
         run: go run ./cmd/vibeguard check -v
+
+      - name: Build Docker image for scanning
+        run: docker build -t vibeguard:test .
+
+      - name: Scan Docker image with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: vibeguard:test
+          format: sarif
+          output: trivy-results.sarif
+          severity: HIGH,CRITICAL
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy-container-scan-pr
