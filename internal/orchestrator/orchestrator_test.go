@@ -5,6 +5,7 @@ package orchestrator
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -1646,7 +1647,11 @@ func TestRun_GrokExtractedInViolation(t *testing.T) {
 
 func TestRun_FileField_ReadsFromFile(t *testing.T) {
 	// Create a temporary file with test content
-	tmpFile := "/tmp/vibeguard_test_file.txt"
+	tmpFile := "./tmp/vibeguard_test_file.txt"
+	tmpDir := "./tmp"
+	if err := os.MkdirAll(tmpDir, 0755); err != nil {
+		t.Fatalf("failed to create tmp directory: %v", err)
+	}
 	fileContent := "coverage: 85.5%"
 	if err := os.WriteFile(tmpFile, []byte(fileContent), 0644); err != nil {
 		t.Fatalf("failed to create test file: %v", err)
@@ -1716,7 +1721,11 @@ func TestRun_FileField_MissingFile_ReturnsError(t *testing.T) {
 }
 
 func TestRun_FileField_WithAssertion(t *testing.T) {
-	tmpFile := "/tmp/vibeguard_test_file_assert.txt"
+	tmpFile := "./tmp/vibeguard_test_file_assert.txt"
+	tmpDir := "./tmp"
+	if err := os.MkdirAll(tmpDir, 0755); err != nil {
+		t.Fatalf("failed to create tmp directory: %v", err)
+	}
 	fileContent := "coverage: 85.5%"
 	if err := os.WriteFile(tmpFile, []byte(fileContent), 0644); err != nil {
 		t.Fatalf("failed to create test file: %v", err)
@@ -1756,7 +1765,11 @@ func TestRun_FileField_WithAssertion(t *testing.T) {
 }
 
 func TestRun_FileField_WithAssertion_Fails(t *testing.T) {
-	tmpFile := "/tmp/vibeguard_test_file_assert_fail.txt"
+	tmpFile := "./tmp/vibeguard_test_file_assert_fail.txt"
+	tmpDir := "./tmp"
+	if err := os.MkdirAll(tmpDir, 0755); err != nil {
+		t.Fatalf("failed to create tmp directory: %v", err)
+	}
 	fileContent := "coverage: 50.0%"
 	if err := os.WriteFile(tmpFile, []byte(fileContent), 0644); err != nil {
 		t.Fatalf("failed to create test file: %v", err)
@@ -1800,7 +1813,11 @@ func TestRun_FileField_WithAssertion_Fails(t *testing.T) {
 }
 
 func TestRunCheck_FileField_ReadsFromFile(t *testing.T) {
-	tmpFile := "/tmp/vibeguard_test_file_check.txt"
+	tmpFile := "./tmp/vibeguard_test_file_check.txt"
+	tmpDir := "./tmp"
+	if err := os.MkdirAll(tmpDir, 0755); err != nil {
+		t.Fatalf("failed to create tmp directory: %v", err)
+	}
 	fileContent := "version: 1.2.3"
 	if err := os.WriteFile(tmpFile, []byte(fileContent), 0644); err != nil {
 		t.Fatalf("failed to create test file: %v", err)
@@ -1838,7 +1855,11 @@ func TestRunCheck_FileField_ReadsFromFile(t *testing.T) {
 }
 
 func TestRun_FileField_WithVariableInterpolation(t *testing.T) {
-	tmpFile := "/tmp/vibeguard_test_file_vars.txt"
+	tmpFile := "./tmp/vibeguard_test_file_vars.txt"
+	tmpDir := "./tmp"
+	if err := os.MkdirAll(tmpDir, 0755); err != nil {
+		t.Fatalf("failed to create tmp directory: %v", err)
+	}
 	fileContent := "status: ok"
 	if err := os.WriteFile(tmpFile, []byte(fileContent), 0644); err != nil {
 		t.Fatalf("failed to create test file: %v", err)
@@ -1879,12 +1900,17 @@ func TestRun_FileField_WithVariableInterpolation(t *testing.T) {
 }
 
 func TestRun_FileField_WithoutGrok_StillReads(t *testing.T) {
-	tmpFile := "/tmp/vibeguard_test_file_no_grok.txt"
+	tmpDir := "vibeguard_test_tmp"
+	tmpFile := filepath.Join(tmpDir, "vibeguard_test_file_no_grok.txt")
+	if err := os.MkdirAll(tmpDir, 0755); err != nil {
+		t.Fatalf("failed to create tmp directory: %v", err)
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
 	fileContent := "some test content"
 	if err := os.WriteFile(tmpFile, []byte(fileContent), 0644); err != nil {
 		t.Fatalf("failed to create test file: %v", err)
 	}
-	defer func() { _ = os.Remove(tmpFile) }()
 
 	cfg := &config.Config{
 		Version: "1",
