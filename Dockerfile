@@ -38,6 +38,23 @@ RUN ARCH=$(dpkg --print-architecture) && \
     /usr/local/bin/bd --version || { echo "ERROR: Installed Beads binary failed version check"; exit 1; } && \
     rm -rf /tmp/beads.tar.gz /tmp/url.txt
 
+# Install Claude Code CLI from official installer
+# The installer places binary in ~/.local/bin, so we move it to /usr/local/bin for global access
+# Retry logic handles transient network issues
+RUN CLAUDE_INSTALL_ATTEMPT="" && \
+    for attempt in 1 2 3; do \
+      echo "Installing Claude Code (attempt $attempt/3)..." && \
+      curl -fsSL https://claude.ai/install.sh 2>/dev/null | bash 2>&1 && \
+      CLAUDE_INSTALL_ATTEMPT="success" && break || true && \
+      if [ $attempt -lt 3 ]; then sleep 2; fi; \
+    done && \
+    if [ -z "$CLAUDE_INSTALL_ATTEMPT" ]; then echo "ERROR: Failed to install Claude Code after 3 attempts"; exit 1; fi && \
+    if [ -f ~/.local/bin/claude ]; then \
+      mv ~/.local/bin/claude /usr/local/bin/claude && \
+      chmod +x /usr/local/bin/claude; \
+    else echo "ERROR: Claude Code binary not found at ~/.local/bin/claude"; exit 1; fi && \
+    /usr/local/bin/claude --help > /dev/null || { echo "WARNING: Claude Code help check failed, but binary exists"; }
+
 # Set up non-root user (security best practice)
 RUN useradd -m -s /bin/bash claude
 
@@ -48,6 +65,6 @@ WORKDIR /home/claude
 # Set up PATH for installed tools (add to user's PATH)
 ENV PATH="/usr/local/bin:${PATH}"
 
-# Health check to ensure Beads CLI is available
+# Health check to ensure both Beads and Claude Code CLIs are available
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD /usr/local/bin/bd --version > /dev/null || exit 1
+  CMD /usr/local/bin/bd --version > /dev/null && which claude > /dev/null || exit 1
