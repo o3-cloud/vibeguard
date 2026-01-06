@@ -1,0 +1,51 @@
+# Git
+.git
+.gitignore
+
+# Build artifacts
+dist/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test artifacts
+*.test
+*.out
+coverage.txt
+coverage.html
+
+# IDE and editor configs
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Documentation (not needed in image)
+*.md
+!LICENSE.md
+
+# Local development
+.env
+.env.*
+*.local
+
+# CI/CD configs
+.github/
+.goreleaser.yaml
+.pre-commit-hooks.yaml
+.commitlintrc.json
+.gremlins.yaml
+
+# Beads local state (will be mounted)
+.beads/
+
+# Claude configs (will be mounted)
+.claude/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.log
