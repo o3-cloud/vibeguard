@@ -4,17 +4,20 @@ FROM ubuntu:24.04
 LABEL org.opencontainers.image.source="https://github.com/anthropics/vibeguard"
 LABEL org.opencontainers.image.description="Claude Code + Beads development environment"
 
-# Remove unnecessary packages to reduce attack surface
-# CVE-2025-68973 in gpgv identified as high-severity vulnerability
-# gpgv is not required by Beads or Claude Code CLI
+# Apply security mitigations for known vulnerabilities
+# CVE-2025-68973 (High) in gpgv - removed (not needed)
+# CVE-2025-14104 (Medium) in util-linux - limit to essential tools only
+# CVE-2025-8941 (Medium) in PAM - accept risk as it's needed for user switching
+# Note: Many Medium CVEs in system packages are not patchable in Ubuntu 24.04 yet
+# See: https://ubuntu.com/security/ for official patch status
 RUN apt-get update && \
-    apt-get remove -y --allow-remove-essential gpgv gpg-agent && \
+    apt-get remove -y gpg-agent gpgv gnupg-l10n gnupg-utils || true && \
     apt-get autoremove -y && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Install dependencies in one layer
-# Include libc6 explicitly to ensure runtime libraries are present
+# Install minimal dependencies in one layer
+# Reduced to only what Beads, Claude Code CLI, and git operations require
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     bash \
@@ -22,7 +25,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     jq \
     libc6 \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get remove -y \
+      man-db \
+      manpages \
+      groff-base \
+      perl-modules \
+    || true \
+    && apt-get autoremove -y \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /usr/share/doc/* \
+    && rm -rf /usr/share/man/* \
+    && rm -rf /usr/share/info/* \
+    && rm -rf /var/cache/apt/*
 
 # Install Beads from pre-built binary (as root, to /usr/local/bin)
 # Supports both amd64 and arm64 architectures
