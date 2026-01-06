@@ -3,15 +3,20 @@ name: Release
 on:
   push:
     branches: [main]
+    tags:
+      - 'v*'
 
 permissions:
   contents: write
   pull-requests: write
 
 jobs:
-  release:
+  semantic-release:
     runs-on: ubuntu-latest
     if: "!contains(github.event.head_commit.message, 'chore(release):')"
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      release_created: ${{ steps.version.outputs.release_created }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -33,79 +38,52 @@ jobs:
           git config --local user.name "GitHub Action"
 
       - name: Create release
-        run: npm run release
+        id: version
+        run: |
+          npm run release || true
+          TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "version=${TAG}" >> "$GITHUB_OUTPUT"
+          if git describe --tags --abbrev=0 2>/dev/null | grep -q "^v"; then
+            echo "release_created=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Push tags
         run: |
-          git push --follow-tags origin main
+          git push --follow-tags origin main || true
 
-      - name: Build release binaries
+  goreleaser:
+    needs: semantic-release
+    if: needs.semantic-release.outputs.release_created == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
+          go-version: '1.24'
 
-      - name: Build binaries
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: latest
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+
+  notify:
+    needs: [semantic-release, goreleaser]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Release status
         run: |
-          mkdir -p bin
-          GOOS=linux GOARCH=amd64 go build -o bin/vibeguard-linux-amd64 ./cmd/vibeguard
-          GOOS=darwin GOARCH=amd64 go build -o bin/vibeguard-darwin-amd64 ./cmd/vibeguard
-          GOOS=darwin GOARCH=arm64 go build -o bin/vibeguard-darwin-arm64 ./cmd/vibeguard
-          GOOS=windows GOARCH=amd64 go build -o bin/vibeguard-windows-amd64.exe ./cmd/vibeguard
-
-      - name: Get latest tag
-        id: tag
-        run: |
-          TAG=$(git describe --tags --abbrev=0)
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
-
-      - name: Create GitHub Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ steps.tag.outputs.tag }}
-          release_name: ${{ steps.tag.outputs.tag }}
-          body_path: CHANGELOG.md
-          draft: false
-          prerelease: false
-
-      - name: Upload Linux binary
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./bin/vibeguard-linux-amd64
-          asset_name: vibeguard-linux-amd64
-          asset_content_type: application/octet-stream
-
-      - name: Upload macOS x86_64 binary
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./bin/vibeguard-darwin-amd64
-          asset_name: vibeguard-darwin-amd64
-          asset_content_type: application/octet-stream
-
-      - name: Upload macOS ARM64 binary
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./bin/vibeguard-darwin-arm64
-          asset_name: vibeguard-darwin-arm64
-          asset_content_type: application/octet-stream
-
-      - name: Upload Windows binary
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./bin/vibeguard-windows-amd64.exe
-          asset_name: vibeguard-windows-amd64.exe
-          asset_content_type: application/octet-stream
+          if [ "${{ needs.goreleaser.result }}" = "success" ]; then
+            echo "✅ Release ${{ needs.semantic-release.outputs.version }} completed successfully"
+          else
+            echo "⚠️ Release process completed with status: ${{ needs.goreleaser.result }}"
+          fi

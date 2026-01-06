@@ -1,0 +1,97 @@
+version: 2
+
+project_name: vibeguard
+
+before:
+  hooks:
+    - go mod tidy
+    - go mod download
+
+builds:
+  - main: ./cmd/vibeguard/main.go
+    id: vibeguard
+    binary: vibeguard
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+
+archives:
+  - name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
+    format_overrides:
+      - goos: windows
+        format: zip
+      - goos: darwin
+        format: tar.gz
+      - goos: linux
+        format: tar.gz
+    files:
+      - LICENSE
+      - README.md
+      - CHANGELOG.md
+      - docs/*
+      - examples/*
+
+brews:
+  - homepage: https://github.com/vibeguard/vibeguard
+    description: Policy enforcement for DevOps workflows
+    license: Apache-2.0
+    repository:
+      owner: vibeguard
+      name: homebrew-vibeguard
+      branch: main
+      token: '{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}'
+    commit_author:
+      name: vibeguard-bot
+      email: bot@vibeguard.dev
+    commit_msg_template: 'chore(brew): bump vibeguard version to {{ .Version }}'
+    skip_upload: false
+
+homebrew_casks:
+  - homepage: https://github.com/vibeguard/vibeguard
+    description: Policy enforcement for DevOps workflows
+    license: Apache-2.0
+    repository:
+      owner: vibeguard
+      name: homebrew-casks
+      branch: main
+      token: '{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}'
+    commit_author:
+      name: vibeguard-bot
+      email: bot@vibeguard.dev
+    commit_msg_template: 'chore(brew): bump vibeguard cask to {{ .Version }}'
+    skip_upload: false
+
+release:
+  github:
+    owner: vibeguard
+    name: vibeguard
+  draft: false
+  prerelease: false
+  name_template: '{{ .Version }}'
+  mode: keep-existing
+
+checksum:
+  name_template: '{{ .ProjectName }}_{{ .Version }}_checksums.txt'
+
+snapshot:
+  version_template: '{{ .Version }}-next'
+
+changelog:
+  use: commit-log
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+      - '^ci:'
+      - 'merge pull request'
+      - 'Merge pull request'
+      - 'Merge branch'
