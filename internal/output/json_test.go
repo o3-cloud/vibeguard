@@ -242,3 +242,78 @@ func TestFormatJSON_WithFixField(t *testing.T) {
 		t.Errorf("expected fix 'Add tests to improve coverage', got %q", v.Fix)
 	}
 }
+
+func TestFormatJSON_WithTags(t *testing.T) {
+	var buf bytes.Buffer
+
+	result := &orchestrator.RunResult{
+		Results: []*orchestrator.CheckResult{
+			{
+				Check: &config.Check{
+					ID:   "fmt",
+					Tags: []string{"format", "fast", "pre-commit"},
+				},
+				Execution: &executor.Result{Duration: 100 * time.Millisecond},
+				Passed:    true,
+			},
+			{
+				Check: &config.Check{
+					ID:   "security",
+					Tags: []string{"security", "slow"},
+				},
+				Execution: &executor.Result{Duration: 500 * time.Millisecond},
+				Passed:    true,
+			},
+			{
+				Check: &config.Check{
+					ID: "lint",
+				},
+				Execution: &executor.Result{Duration: 200 * time.Millisecond},
+				Passed:    true,
+			},
+		},
+		Violations: nil,
+		ExitCode:   0,
+	}
+
+	err := FormatJSON(&buf, result)
+	if err != nil {
+		t.Fatalf("FormatJSON failed: %v", err)
+	}
+
+	var output JSONOutput
+	if err := json.Unmarshal(buf.Bytes(), &output); err != nil {
+		t.Fatalf("failed to unmarshal output: %v", err)
+	}
+
+	if len(output.Checks) != 3 {
+		t.Errorf("expected 3 checks, got %d", len(output.Checks))
+	}
+
+	// Check fmt with tags
+	if output.Checks[0].ID != "fmt" {
+		t.Errorf("expected check[0] id 'fmt', got %q", output.Checks[0].ID)
+	}
+	if len(output.Checks[0].Tags) != 3 {
+		t.Errorf("expected check[0] to have 3 tags, got %d", len(output.Checks[0].Tags))
+	}
+	if output.Checks[0].Tags[0] != "format" || output.Checks[0].Tags[1] != "fast" || output.Checks[0].Tags[2] != "pre-commit" {
+		t.Errorf("unexpected tags for check[0]: %v", output.Checks[0].Tags)
+	}
+
+	// Check security with tags
+	if output.Checks[1].ID != "security" {
+		t.Errorf("expected check[1] id 'security', got %q", output.Checks[1].ID)
+	}
+	if len(output.Checks[1].Tags) != 2 {
+		t.Errorf("expected check[1] to have 2 tags, got %d", len(output.Checks[1].Tags))
+	}
+
+	// Check lint without tags (should be empty, not nil)
+	if output.Checks[2].ID != "lint" {
+		t.Errorf("expected check[2] id 'lint', got %q", output.Checks[2].ID)
+	}
+	if output.Checks[2].Tags == nil && len(output.Checks[2].Tags) != 0 {
+		t.Errorf("expected check[2] to have empty tags, got %v", output.Checks[2].Tags)
+	}
+}

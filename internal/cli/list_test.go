@@ -201,3 +201,64 @@ checks:
 		t.Errorf("runList with dependencies failed: %v", err)
 	}
 }
+
+func TestRunList_WithTags(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "vibeguard-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	configContent := `version: "1"
+checks:
+  - id: fmt
+    run: "gofmt -l ."
+    severity: error
+    timeout: 10s
+    tags: [format, fast, pre-commit]
+  - id: security
+    run: "gosec ./..."
+    severity: error
+    timeout: 30s
+    tags: [security, slow]
+  - id: test
+    run: "go test ./..."
+    severity: error
+    timeout: 60s
+`
+	configPath := filepath.Join(tmpDir, "vibeguard.yaml")
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write config: %v", err)
+	}
+
+	oldConfig := configFile
+	oldVerbose := verbose
+	defer func() {
+		configFile = oldConfig
+		verbose = oldVerbose
+	}()
+
+	configFile = configPath
+	verbose = true
+
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetErr(&buf)
+
+	err = runList(listCmd, []string{})
+	if err != nil {
+		t.Errorf("runList with tags failed: %v", err)
+	}
+
+	output := buf.String()
+	// Verify tags are in output
+	if !bytes.Contains(buf.Bytes(), []byte("Tags:")) {
+		t.Errorf("expected 'Tags:' in output, got: %s", output)
+	}
+	if !bytes.Contains(buf.Bytes(), []byte("format")) {
+		t.Errorf("expected 'format' tag in output, got: %s", output)
+	}
+	if !bytes.Contains(buf.Bytes(), []byte("security")) {
+		t.Errorf("expected 'security' tag in output, got: %s", output)
+	}
+}

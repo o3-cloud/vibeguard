@@ -17,9 +17,10 @@ type JSONOutput struct {
 
 // JSONCheck represents a check result in JSON format.
 type JSONCheck struct {
-	ID         string `json:"id"`
-	Status     string `json:"status"`
-	DurationMS int64  `json:"duration_ms"`
+	ID         string   `json:"id"`
+	Tags       []string `json:"tags,omitempty"`
+	Status     string   `json:"status"`
+	DurationMS int64    `json:"duration_ms"`
 }
 
 // JSONViolation represents a violation in JSON format.
@@ -51,6 +52,7 @@ func FormatJSON(out io.Writer, result *orchestrator.RunResult) error {
 		}
 		output.Checks = append(output.Checks, JSONCheck{
 			ID:         r.Check.ID,
+			Tags:       r.Check.Tags,
 			Status:     status,
 			DurationMS: r.Execution.Duration.Milliseconds(),
 		})

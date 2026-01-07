@@ -57,6 +57,9 @@ func (f *Formatter) formatVerbose(result *orchestrator.RunResult) {
 		if r.Passed {
 			_, _ = fmt.Fprintf(f.out, "✓ %-15s passed (%.1fs)\n",
 				r.Check.ID, r.Execution.Duration.Seconds())
+			if len(r.Check.Tags) > 0 {
+				_, _ = fmt.Fprintf(f.out, "  Tags: %s\n", strings.Join(r.Check.Tags, ", "))
+			}
 		} else if r.Execution.Cancelled {
 			_, _ = fmt.Fprintf(f.out, "⊘ %-15s cancelled\n", r.Check.ID)
 		} else {
@@ -77,6 +80,10 @@ func (f *Formatter) formatVerbose(result *orchestrator.RunResult) {
 
 			_, _ = fmt.Fprintf(f.out, "✗ %-15s %s (%.1fs)\n",
 				r.Check.ID, header, r.Execution.Duration.Seconds())
+
+			if len(r.Check.Tags) > 0 {
+				_, _ = fmt.Fprintf(f.out, "  Tags: %s\n", strings.Join(r.Check.Tags, ", "))
+			}
 
 			// Show suggestion if present (interpolated with extracted values)
 			if v.Suggestion != "" {
