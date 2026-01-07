@@ -69,6 +69,7 @@ func (c *Composer) buildSections() []PromptSection {
 		ToolingInspectionSection(c.analysis),
 		ToolingResearchSection(c.analysis.ProjectType),
 		RecommendationsSection(c.recommendations),
+		TemplateDiscoverySection(c.analysis.ProjectType),
 		ConfigRequirementsSection(),
 		LanguageExamplesSection(c.analysis.ProjectType),
 		ValidationRulesSection(),
@@ -109,6 +110,9 @@ func (c *Composer) ComposeWithOptions(opts ComposerOptions) string {
 	if opts.IncludeRecommendations {
 		sections = append(sections, RecommendationsSection(c.recommendations))
 	}
+	if opts.IncludeTemplateDiscovery {
+		sections = append(sections, TemplateDiscoverySection(c.analysis.ProjectType))
+	}
 	if opts.IncludeRequirements {
 		sections = append(sections, ConfigRequirementsSection())
 	}
@@ -132,6 +136,7 @@ type ComposerOptions struct {
 	IncludeToolingInspection bool
 	IncludeToolingResearch   bool
 	IncludeRecommendations   bool
+	IncludeTemplateDiscovery bool
 	IncludeRequirements      bool
 	IncludeExamples          bool
 	IncludeValidation        bool
@@ -146,6 +151,7 @@ func DefaultComposerOptions() ComposerOptions {
 		IncludeToolingInspection: true,
 		IncludeToolingResearch:   true,
 		IncludeRecommendations:   true,
+		IncludeTemplateDiscovery: true,
 		IncludeRequirements:      true,
 		IncludeExamples:          true,
 		IncludeValidation:        true,
@@ -161,6 +167,7 @@ func MinimalComposerOptions() ComposerOptions {
 		IncludeToolingInspection: false,
 		IncludeToolingResearch:   false,
 		IncludeRecommendations:   true,
+		IncludeTemplateDiscovery: true,
 		IncludeRequirements:      true,
 		IncludeExamples:          false,
 		IncludeValidation:        false,

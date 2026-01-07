@@ -14,10 +14,11 @@ import (
 )
 
 var (
-	initForce    bool
-	initTemplate string
-	initAssist   bool
-	initOutput   string
+	initForce         bool
+	initTemplate      string
+	initAssist        bool
+	initOutput        string
+	initListTemplates bool
 )
 
 var initCmd = &cobra.Command{
@@ -26,8 +27,8 @@ var initCmd = &cobra.Command{
 	Long: `Create a starter configuration file in the current directory.
 
 Use --template to select a predefined template:
-  vibeguard init --template list          List available templates
   vibeguard init --template go-standard   Use the Go standard template
+  vibeguard init --list-templates         List available templates
 
 Use --assist for AI agent-assisted setup:
   vibeguard init --assist                 Generate a setup prompt for AI agents
@@ -42,7 +43,8 @@ Use --force to overwrite an existing configuration file.`,
 
 func init() {
 	initCmd.Flags().BoolVarP(&initForce, "force", "f", false, "Overwrite existing config file")
-	initCmd.Flags().StringVarP(&initTemplate, "template", "t", "", "Use a predefined template (use 'list' to see available templates)")
+	initCmd.Flags().StringVarP(&initTemplate, "template", "t", "", "Use a predefined template (use --list-templates to see available templates)")
+	initCmd.Flags().BoolVar(&initListTemplates, "list-templates", false, "List available templates")
 	initCmd.Flags().BoolVar(&initAssist, "assist", false, "Generate an AI agent-assisted setup prompt")
 	initCmd.Flags().StringVarP(&initOutput, "output", "o", "", "Output file for --assist mode (default: stdout)")
 	rootCmd.AddCommand(initCmd)
@@ -91,6 +93,11 @@ func runInit(cmd *cobra.Command, args []string) error {
 		return runAssist(cmd, args)
 	}
 
+	// Handle --list-templates flag
+	if initListTemplates {
+		return listTemplates()
+	}
+
 	// Handle --template list
 	if initTemplate == "list" {
 		return listTemplates()
@@ -104,7 +111,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 		// Use specified template
 		tmpl, err := templates.Get(initTemplate)
 		if err != nil {
-			return fmt.Errorf("unknown template %q (use --template list to see available templates)", initTemplate)
+			return fmt.Errorf("unknown template %q (use --list-templates to see available templates)", initTemplate)
 		}
 		content = tmpl.Content
 		templateName = tmpl.Name

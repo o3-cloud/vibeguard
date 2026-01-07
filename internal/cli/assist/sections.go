@@ -76,6 +76,67 @@ func ProjectAnalysisSection(analysis *ProjectAnalysis) PromptSection {
 	}
 }
 
+// TemplateDiscoverySection generates instructions for discovering and using templates.
+func TemplateDiscoverySection(projectType string) PromptSection {
+	var sb strings.Builder
+
+	sb.WriteString("## Available Templates\n\n")
+	sb.WriteString("Rather than creating a custom configuration from scratch, you can use one of VibeGuard's predefined templates that are optimized for specific languages and frameworks.\n\n")
+
+	sb.WriteString("### Discover Templates\n\n")
+	sb.WriteString("To see all available templates, run:\n\n")
+	sb.WriteString("```bash\n")
+	sb.WriteString("vibeguard init --list-templates\n")
+	sb.WriteString("```\n\n")
+
+	sb.WriteString("### Template Recommendation\n\n")
+	if projectType != "" {
+		// Provide a specific recommendation based on project type
+		templateName := getTemplateRecommendation(projectType)
+		sb.WriteString(fmt.Sprintf("Based on the detected project type (**%s**), try this template:\n\n", projectType))
+		sb.WriteString("```bash\n")
+		sb.WriteString(fmt.Sprintf("vibeguard init --template %s\n", templateName))
+		sb.WriteString("```\n\n")
+	}
+
+	sb.WriteString("### When to Use Templates\n\n")
+	sb.WriteString("Use a predefined template when:\n")
+	sb.WriteString("- You want quick setup with reasonable defaults\n")
+	sb.WriteString("- Your project matches the template's language/framework\n")
+	sb.WriteString("- You're happy with the template's default checks\n\n")
+
+	sb.WriteString("### When to Use Custom Configuration\n\n")
+	sb.WriteString("Create a custom configuration when:\n")
+	sb.WriteString("- No template matches your exact setup\n")
+	sb.WriteString("- You have specific checks not in standard templates\n")
+	sb.WriteString("- You want fine-grained control over all settings\n\n")
+
+	sb.WriteString("You can also start with a template and modify it to suit your needs.")
+
+	return PromptSection{
+		Title:   "Available Templates",
+		Content: sb.String(),
+	}
+}
+
+// getTemplateRecommendation returns a recommended template for a given project type.
+func getTemplateRecommendation(projectType string) string {
+	switch projectType {
+	case "go":
+		return "go-standard"
+	case "node", "javascript", "typescript":
+		return "node-typescript"
+	case "python":
+		return "python-pip"
+	case "rust":
+		return "rust-cargo"
+	case "java":
+		return "generic"
+	default:
+		return "generic"
+	}
+}
+
 // RecommendationsSection generates the recommended checks section.
 func RecommendationsSection(recommendations []CheckRecommendation) PromptSection {
 	var sb strings.Builder
