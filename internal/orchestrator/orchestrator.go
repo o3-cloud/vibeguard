@@ -220,6 +220,50 @@ func (o *Orchestrator) Run(ctx context.Context) (*RunResult, error) {
 	// Apply tag filtering
 	filteredChecks, excludedByTag := o.filterChecksByTags(o.config.Checks)
 
+	// Pre-process filtered checks to identify those with missing dependencies
+	// (dependencies excluded by tag filter, not genuinely unknown)
+	// These checks will be skipped during execution with a warning
+	checkIDs := make(map[string]bool)
+	for _, check := range filteredChecks {
+		checkIDs[check.ID] = true
+	}
+
+	// Build a set of all check IDs in the original config to detect tag-filtered dependencies
+	allCheckIDs := make(map[string]bool)
+	for _, check := range o.config.Checks {
+		allCheckIDs[check.ID] = true
+	}
+
+	// Build a new list of checks that have all their dependencies available
+	// and track checks with missing dependencies separately
+	var validChecks []config.Check
+	var skippedChecks []*config.Check // Checks with missing deps (tag-filtered) will be skipped
+	for i := range filteredChecks {
+		check := &filteredChecks[i]
+		hasMissingDep := false
+		for _, dep := range check.Requires {
+			if !checkIDs[dep] {
+				// Check if this dependency exists in the original config
+				// If it does, it's excluded by tag filter, so we skip this check
+				// If it doesn't, it's an unknown dependency - let BuildGraph handle the error
+				if allCheckIDs[dep] {
+					// This dependency is missing due to tag filtering
+					// Mark this check as excluded so it gets skipped with a warning
+					excludedByTag[check.ID] = true
+					hasMissingDep = true
+					skippedChecks = append(skippedChecks, check)
+					break
+				}
+				// Otherwise, it's an unknown dependency - let it through to BuildGraph
+				// which will return a proper error
+			}
+		}
+		if !hasMissingDep {
+			validChecks = append(validChecks, *check)
+		}
+	}
+	filteredChecks = validChecks
+
 	// Build dependency graph to determine execution order
 	graph, err := BuildGraph(filteredChecks)
 	if err != nil {
@@ -483,6 +527,41 @@ func (o *Orchestrator) Run(ctx context.Context) (*RunResult, error) {
 		if failFastTriggered {
 			break
 		}
+	}
+
+	// Add skipped checks (with missing dependencies) to results and violations
+	for _, check := range skippedChecks {
+		result := &CheckResult{
+			Check:  check,
+			Passed: false,
+			Execution: &executor.Result{
+				CheckID:  check.ID,
+				ExitCode: -1,
+				Success:  false,
+			},
+			Extracted: make(map[string]string),
+		}
+
+		// Find the missing dependency
+		var missingDep string
+		for _, dep := range check.Requires {
+			if !checkIDs[dep] {
+				missingDep = dep
+				break
+			}
+		}
+
+		violation := &Violation{
+			CheckID:    check.ID,
+			Severity:   check.Severity,
+			Command:    check.Run,
+			Suggestion: fmt.Sprintf("Skipped: required dependency %q not in filtered set", missingDep),
+			Fix:        check.Fix,
+			Extracted:  result.Extracted,
+		}
+
+		results = append(results, result)
+		violations = append(violations, violation)
 	}
 
 	return &RunResult{
