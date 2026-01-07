@@ -422,3 +422,107 @@ checks:
 		t.Errorf("should not reach ExitError when JSON formatting fails, got exit code %d", exitErr.Code)
 	}
 }
+
+func TestRunCheck_WithTagsFlag(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "vibeguard-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	configContent := `version: "1"
+checks:
+  - id: fmt
+    run: "true"
+    severity: error
+    timeout: 10s
+    tags: [format, fast]
+  - id: security
+    run: "true"
+    severity: error
+    timeout: 10s
+    tags: [security, slow]
+`
+	configPath := filepath.Join(tmpDir, "vibeguard.yaml")
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write config: %v", err)
+	}
+
+	oldConfig := configFile
+	oldVerbose := verbose
+	oldJSON := jsonOutput
+	oldTags := tags
+	defer func() {
+		configFile = oldConfig
+		verbose = oldVerbose
+		jsonOutput = oldJSON
+		tags = oldTags
+	}()
+
+	configFile = configPath
+	verbose = false
+	jsonOutput = false
+	// Simulate parsing --tags=format,fast
+	tags = []string{"format", "fast"}
+
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetErr(&buf)
+
+	err = runCheck(checkCmd, []string{})
+	if err != nil {
+		t.Errorf("runCheck with tags flag failed: %v", err)
+	}
+}
+
+func TestRunCheck_WithExcludeTagsFlag(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "vibeguard-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	configContent := `version: "1"
+checks:
+  - id: fmt
+    run: "true"
+    severity: error
+    timeout: 10s
+    tags: [format, fast]
+  - id: security
+    run: "true"
+    severity: error
+    timeout: 10s
+    tags: [security, slow]
+`
+	configPath := filepath.Join(tmpDir, "vibeguard.yaml")
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write config: %v", err)
+	}
+
+	oldConfig := configFile
+	oldVerbose := verbose
+	oldJSON := jsonOutput
+	oldExcludeTags := excludeTags
+	defer func() {
+		configFile = oldConfig
+		verbose = oldVerbose
+		jsonOutput = oldJSON
+		excludeTags = oldExcludeTags
+	}()
+
+	configFile = configPath
+	verbose = false
+	jsonOutput = false
+	// Simulate parsing --exclude-tags=slow
+	excludeTags = []string{"slow"}
+
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetErr(&buf)
+
+	err = runCheck(checkCmd, []string{})
+	if err != nil {
+		t.Errorf("runCheck with exclude-tags flag failed: %v", err)
+	}
+}
