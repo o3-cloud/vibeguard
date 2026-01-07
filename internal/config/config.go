@@ -15,6 +15,11 @@ import (
 // alphanumeric characters, underscores, or hyphens.
 var validCheckID = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_-]*$`)
 
+// validTag matches lowercase alphanumeric characters and hyphens.
+// Tags must start with a lowercase letter, followed by any combination of
+// lowercase alphanumeric characters or hyphens.
+var validTag = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
+
 // ConfigError represents a configuration error that should result in exit code 2.
 type ConfigError struct {
 	Message  string
@@ -197,6 +202,16 @@ func (c *Config) Validate() error {
 			return &ConfigError{
 				Message: fmt.Sprintf("check %q has invalid severity: %s", check.ID, check.Severity),
 				LineNum: c.FindCheckNodeLine(check.ID, i),
+			}
+		}
+
+		// Validate tags
+		for _, tag := range check.Tags {
+			if !validTag.MatchString(tag) {
+				return &ConfigError{
+					Message: fmt.Sprintf("check %q has invalid tag %q: must be lowercase alphanumeric with hyphens", check.ID, tag),
+					LineNum: c.FindCheckNodeLine(check.ID, i),
+				}
 			}
 		}
 

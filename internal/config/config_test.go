@@ -1215,6 +1215,100 @@ func TestValidCheckIDRegex(t *testing.T) {
 	}
 }
 
+func TestLoad_InvalidTags(t *testing.T) {
+	tests := []struct {
+		name    string
+		tags    string
+		wantErr bool
+	}{
+		// Valid tags
+		{name: "simple lowercase", tags: "[simple]", wantErr: false},
+		{name: "with hyphen", tags: "[pre-commit]", wantErr: false},
+		{name: "with numbers", tags: "[fast1, check2]", wantErr: false},
+		{name: "multiple tags", tags: "[format, lint, fast]", wantErr: false},
+		{name: "empty tags", tags: "[]", wantErr: false},
+
+		// Invalid tags
+		{name: "uppercase letter", tags: "[Fast]", wantErr: true},
+		{name: "uppercase in middle", tags: "[preFast]", wantErr: true},
+		{name: "starts with number", tags: "[1fast]", wantErr: true},
+		{name: "starts with hyphen", tags: "[-fast]", wantErr: true},
+		{name: "contains space", tags: "[fast check]", wantErr: true},
+		{name: "contains underscore", tags: "[fast_check]", wantErr: true},
+		{name: "contains dot", tags: "[fast.check]", wantErr: true},
+		{name: "uppercase mixed", tags: "[Format, Lint]", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			configPath := filepath.Join(dir, "vibeguard.yaml")
+
+			content := `
+version: "1"
+checks:
+  - id: test
+    run: echo hello
+    tags: ` + tt.tags + `
+`
+			if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+				t.Fatal(err)
+			}
+
+			_, err := Load(configPath)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("expected error for invalid tags %q, got nil", tt.tags)
+				} else if !strings.Contains(err.Error(), "invalid tag") {
+					t.Errorf("expected 'invalid tag' error, got: %v", err)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("unexpected error for valid tags %q: %v", tt.tags, err)
+				}
+			}
+		})
+	}
+}
+
+func TestValidTagRegex(t *testing.T) {
+	// Direct regex tests for edge cases
+	tests := []struct {
+		tag   string
+		valid bool
+	}{
+		{"a", true},
+		{"fast", true},
+		{"pre-commit", true},
+		{"check1", true},
+		{"a1b2c3", true},
+		{"a-b-c", true},
+		{"format", true},
+		{"security", true},
+		{"", false},
+		{"A", false},
+		{"Fast", false},
+		{"FAST", false},
+		{"1fast", false},
+		{"-fast", false},
+		{"fast ", false},
+		{" fast", false},
+		{"fast_check", false},
+		{"fast.check", false},
+		{"fast check", false},
+		{"fast@check", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.tag, func(t *testing.T) {
+			got := validTag.MatchString(tt.tag)
+			if got != tt.valid {
+				t.Errorf("validTag.MatchString(%q) = %v, want %v", tt.tag, got, tt.valid)
+			}
+		})
+	}
+}
+
 // Edge case tests for boundary conditions in config validation
 func TestLoad_EmptyStringVersion(t *testing.T) {
 	// Test that empty version is treated as default

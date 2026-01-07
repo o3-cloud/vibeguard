@@ -87,3 +87,10 @@ To create new Architecture Decision Records:
 - [MADR (Markdown Architecture Decision Records)](https://adr.github.io/madr/)
 - [Beads Repository](https://github.com/steveyegge/beads)
 - [Claude Code Documentation](https://docs.claude.com/claude-code)
+
+
+## Rules
+
+### DO
+- Follow the spec and ADRs
+- Verify your work before committing changes

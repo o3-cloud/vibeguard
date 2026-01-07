@@ -23,6 +23,7 @@ type Check struct {
 	Suggestion string   `yaml:"suggestion"`
 	Fix        string   `yaml:"fix,omitempty"`
 	Requires   []string `yaml:"requires"`
+	Tags       []string `yaml:"tags,omitempty"`
 	Timeout    Duration `yaml:"timeout"`
 }
 
