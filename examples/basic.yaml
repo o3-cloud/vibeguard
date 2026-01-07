@@ -1,0 +1,66 @@
+# Basic Example: Essential Checks for Go Project
+# This is a minimal but practical starting configuration for a Go project
+# including code formatting, static analysis, and unit tests with tags for filtering.
+
+version: "1"
+
+checks:
+  # Code formatting check
+  # Tags: format (code formatting), fast (completes quickly), pre-commit (suitable for pre-commit hooks)
+  - id: fmt
+    run: test -z "$(gofmt -l .)"
+    tags: [format, fast, pre-commit]
+    severity: error
+    suggestion: "Code is not properly formatted. Run 'gofmt -w .' to fix."
+
+  # Static analysis
+  # Tags: lint (static analysis), fast (completes quickly), pre-commit (suitable for pre-commit hooks)
+  - id: vet
+    run: go vet ./...
+    tags: [lint, fast, pre-commit]
+    severity: error
+    suggestion: "Go vet found issues in the codebase. Run 'go vet ./...' for details."
+
+  # Linting with golangci-lint (requires installation: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest)
+  # Tags: lint (static analysis), fast (completes quickly), ci (suitable for CI/CD)
+  - id: lint
+    run: golangci-lint run ./...
+    tags: [lint, fast, ci]
+    severity: warning
+    suggestion: "Linting issues found. Run 'golangci-lint run --fix' for auto-fixes."
+    timeout: 30s
+
+  # Unit tests
+  # Tags: test (tests), slow (takes time to run), ci (suitable for CI/CD)
+  # Dependencies: Runs after fmt to ensure code is formatted
+  - id: test
+    run: go test ./...
+    tags: [test, slow, ci]
+    severity: error
+    suggestion: "Some tests are failing. Run 'go test -v ./...' for details."
+    requires:
+      - fmt
+    timeout: 60s
+
+  # Code coverage validation
+  # Tags: test (tests), slow (takes time to run), ci (suitable for CI/CD)
+  # Dependencies: Runs after test check passes
+  - id: coverage
+    run: go test ./... -coverprofile=cover.out && go tool cover -func=cover.out
+    grok:
+      - total:.*\(statements\)\s+%{NUMBER:coverage}%
+    assert: "coverage >= 70"
+    tags: [test, slow, ci]
+    severity: warning
+    suggestion: "Coverage is {{.coverage}}%, target is 70%. Add more test cases."
+    requires:
+      - test
+    timeout: 60s
+
+# Filter examples:
+# vibeguard check --tags format,lint    # Run formatting and linting
+# vibeguard check --tags fast           # Run only quick checks
+# vibeguard check --tags pre-commit     # Run pre-commit friendly checks
+# vibeguard check --exclude-tags slow   # Skip slow tests locally
+# vibeguard check --tags ci             # Run CI checks
+# vibeguard tags                        # List all available tags

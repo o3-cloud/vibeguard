@@ -4,6 +4,7 @@
 # - Complex grok patterns with multiple extractions
 # - Dependency chains for efficient execution ordering
 # - Templated suggestions with extracted values
+# - Tag-based filtering for multi-phase execution
 
 version: "1"
 
@@ -15,42 +16,46 @@ vars:
 checks:
   # ============================================
   # PHASE 1: Fast Deterministic Checks
+  # Tags: format, lint, fast, pre-commit
+  # These checks run quickly and provide early feedback
   # ============================================
 
   # Format check
   - id: fmt
     run: test -z "$(gofmt -l .)"
+    tags: [format, fast, pre-commit]
     severity: error
     suggestion: "Code is not properly formatted"
-    fix: "gofmt -w ."
     timeout: 5s
 
   # Static analysis
   - id: vet
     run: go vet {{.go_packages}}
+    tags: [lint, fast, pre-commit]
     severity: error
     suggestion: "go vet found issues in the codebase"
-    fix: "go vet {{.go_packages}}"
     timeout: 10s
 
   # Linting with golangci-lint
   - id: lint
     run: golangci-lint run {{.go_packages}}
+    tags: [lint, fast, ci]
     severity: warning
     suggestion: "Linting issues found. Run golangci-lint for details."
-    fix: "golangci-lint run {{.go_packages}} --fix"
     timeout: 30s
 
   # ============================================
   # PHASE 2: Testing and Metrics
+  # Tags: test, slow, ci
+  # These checks validate the correctness of the code
   # ============================================
 
   # Unit tests - depends on formatting being correct
   - id: test
     run: go test {{.go_packages}} -v
+    tags: [test, slow, ci]
     severity: error
     suggestion: "Some tests are failing"
-    fix: "go test {{.go_packages}} -v"
     timeout: 60s
     requires:
       - fmt
@@ -61,9 +66,9 @@ checks:
     grok:
       - total:.*\(statements\)\s+%{NUMBER:coverage}%
     assert: "coverage >= {{.min_coverage}}"
+    tags: [test, slow, ci]
     severity: warning
     suggestion: "Coverage is {{.coverage}}%, need {{.min_coverage}}%. Add more test cases."
-    fix: "go test {{.go_packages}} -coverprofile=cover.out && go tool cover -html=cover.out"
     timeout: 60s
     requires:
       - test
@@ -74,24 +79,26 @@ checks:
     grok:
       - '%{INT:score} %{WORD:func} %{GREEDYDATA:location}'
     assert: "score <= {{.max_complexity}}"
+    tags: [test, slow, ci]
     severity: warning
     suggestion: "Function {{.func}} at {{.location}} has complexity {{.score}} (max: {{.max_complexity}})"
-    fix: "gocyclo -top 10 ."
     timeout: 15s
 
   # Build verification - depends on vet passing
   - id: build
     run: go build {{.go_packages}}
+    tags: [build, slow, ci]
     severity: error
     suggestion: "Build failed with compilation errors"
-    fix: "go build {{.go_packages}}"
     timeout: 30s
     requires:
       - vet
 
   # ============================================
   # PHASE 3: LLM-Powered Checks (Slower)
+  # Tags: llm, slow, ci-only
   # These run after deterministic checks pass
+  # Use with: vibeguard check --tags llm
   # ============================================
 
   # Architecture review using Claude CLI
@@ -107,9 +114,9 @@ checks:
     grok:
       - 'VERDICT: %{WORD:verdict} \| REASON: %{GREEDYDATA:reason}'
     assert: 'verdict == "PASS"'
+    tags: [llm, slow, ci-only]
     severity: warning
     suggestion: "{{.reason}}"
-    fix: "Review the architectural concerns and refactor as needed"
     timeout: 60s
     requires:
       - fmt
@@ -128,9 +135,9 @@ checks:
     grok:
       - 'VERDICT: %{WORD:verdict} \| REASON: %{GREEDYDATA:reason}'
     assert: 'verdict == "PASS"'
+    tags: [llm, security, slow, ci-only]
     severity: error
     suggestion: "Security issue: {{.reason}}"
-    fix: "Address the security concern identified"
     timeout: 60s
     requires:
       - build
@@ -149,45 +156,68 @@ checks:
     grok:
       - 'SCORE: %{INT:score} \| FEEDBACK: %{GREEDYDATA:feedback}'
     assert: "score >= 7"
+    tags: [llm, slow, ci-only]
     severity: warning
     suggestion: "PR description needs improvement (score: {{.score}}/10): {{.feedback}}"
-    fix: "Update the PR description with more context"
     timeout: 60s
     requires:
       - test
 
-  # ============================================
-  # ALTERNATIVE: Local LLM with Ollama
-  # Uncomment to use instead of Claude
-  # ============================================
+# ============================================
+# Tag-Based Filtering Examples
+# ============================================
+# Local development (fast checks only):
+#   vibeguard check --tags fast --exclude-tags slow
+#
+# Pre-commit hook (pre-commit safe checks):
+#   vibeguard check --tags pre-commit
+#
+# CI/CD pipeline (all automated checks):
+#   vibeguard check --exclude-tags llm
+#
+# LLM reviews only (for deep analysis):
+#   vibeguard check --tags llm
+#
+# Full validation (everything):
+#   vibeguard check
+#
+# Discover available tags:
+#   vibeguard tags
 
-  # - id: llm-review-ollama
-  #   run: |
-  #     ollama run codellama "Review this code for issues.
-  #     Output: VERDICT: PASS or FAIL | REASON: <why>
-  #     $(git diff HEAD~1 -- '*.go' | head -50)"
-  #   grok:
-  #     - 'VERDICT: %{WORD:verdict} \| REASON: %{GREEDYDATA:reason}'
-  #   assert: 'verdict == "PASS"'
-  #   severity: warning
-  #   suggestion: "{{.reason}}"
-  #   timeout: 120s
-  #   requires:
-  #     - test
+# ============================================
+# ALTERNATIVE: Local LLM with Ollama
+# Uncomment to use instead of Claude
+# ============================================
 
-  # ============================================
-  # ALTERNATIVE: Gemini CLI
-  # ============================================
+# - id: llm-review-ollama
+#   run: |
+#     ollama run codellama "Review this code for issues.
+#     Output: VERDICT: PASS or FAIL | REASON: <why>
+#     $(git diff HEAD~1 -- '*.go' | head -50)"
+#   grok:
+#     - 'VERDICT: %{WORD:verdict} \| REASON: %{GREEDYDATA:reason}'
+#   assert: 'verdict == "PASS"'
+#   tags: [llm, slow, ci-only]
+#   severity: warning
+#   suggestion: "{{.reason}}"
+#   timeout: 120s
+#   requires:
+#     - test
 
-  # - id: llm-review-gemini
-  #   run: |
-  #     gemini -p "Review this code. Output: VERDICT: PASS/FAIL | REASON: <why>
-  #     $(git diff HEAD~1 -- '*.go' | head -50)"
-  #   grok:
-  #     - 'VERDICT: %{WORD:verdict} \| REASON: %{GREEDYDATA:reason}'
-  #   assert: 'verdict == "PASS"'
-  #   severity: warning
-  #   suggestion: "{{.reason}}"
-  #   timeout: 60s
-  #   requires:
-  #     - test
+# ============================================
+# ALTERNATIVE: Gemini CLI
+# ============================================
+
+# - id: llm-review-gemini
+#   run: |
+#     gemini -p "Review this code. Output: VERDICT: PASS/FAIL | REASON: <why>
+#     $(git diff HEAD~1 -- '*.go' | head -50)"
+#   grok:
+#     - 'VERDICT: %{WORD:verdict} \| REASON: %{GREEDYDATA:reason}'
+#   assert: 'verdict == "PASS"'
+#   tags: [llm, slow, ci-only]
+#   severity: warning
+#   suggestion: "{{.reason}}"
+#   timeout: 60s
+#   requires:
+#     - test

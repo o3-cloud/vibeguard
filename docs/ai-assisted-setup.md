@@ -106,16 +106,19 @@ Based on detected tools, the inspector generates check recommendations:
 checks:
   - id: fmt
     run: test -z "$(gofmt -l .)"
+    tags: [format, fast, pre-commit]
     severity: error
     suggestion: "Run 'gofmt -w .' to format your Go code."
 
   - id: lint
     run: golangci-lint run ./...
+    tags: [lint, fast, ci]
     severity: error
     suggestion: "Fix linting issues. Run 'golangci-lint run --fix' for auto-fixes."
 
   - id: test
     run: go test ./...
+    tags: [test, slow, ci]
     severity: error
     suggestion: "Fix failing tests before committing."
 
@@ -124,11 +127,17 @@ checks:
     grok:
       - coverage: %{NUMBER:coverage}%
     assert: "coverage >= 70"
+    tags: [test, slow, ci]
     severity: warning
     suggestion: "Coverage is {{.coverage}}%, target is 70%. Add tests."
     requires:
       - test
 ```
+
+**Usage with Tags:**
+- Local pre-commit: `vibeguard check --tags pre-commit`
+- Fast local checks: `vibeguard check --tags fast`
+- CI/CD pipeline: `vibeguard check --tags ci`
 
 ### Example: Node.js Project with ESLint and Jest
 
@@ -136,19 +145,27 @@ checks:
 checks:
   - id: lint
     run: npx eslint .
+    tags: [lint, fast, ci]
     severity: error
     suggestion: "Fix ESLint errors. Run 'npx eslint . --fix' for auto-fixes."
 
   - id: format
     run: npx prettier --check .
+    tags: [format, fast, pre-commit]
     severity: error
     suggestion: "Run 'npx prettier --write .' to format code."
 
   - id: test
     run: npm test
+    tags: [test, slow, ci]
     severity: error
     suggestion: "Fix failing tests."
 ```
+
+**Usage with Tags:**
+- Local pre-commit: `vibeguard check --tags pre-commit`
+- Local fast checks: `vibeguard check --tags fast`
+- CI pipeline: `vibeguard check --tags ci`
 
 ### Example: Python Project with pytest and Black
 
@@ -156,19 +173,27 @@ checks:
 checks:
   - id: format
     run: black --check .
+    tags: [format, fast, pre-commit]
     severity: error
     suggestion: "Run 'black .' to format Python code."
 
   - id: lint
     run: pylint src/
+    tags: [lint, fast, ci]
     severity: warning
     suggestion: "Address pylint warnings to improve code quality."
 
   - id: test
     run: pytest
+    tags: [test, slow, ci]
     severity: error
     suggestion: "Fix failing tests before committing."
 ```
+
+**Usage with Tags:**
+- Local pre-commit: `vibeguard check --tags pre-commit`
+- Local fast checks: `vibeguard check --tags fast`
+- CI pipeline: `vibeguard check --tags ci`
 
 ## Setup Guide Structure
 

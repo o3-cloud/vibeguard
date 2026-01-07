@@ -91,6 +91,8 @@ All commands support the following flags:
 | `--json` | | Output results in JSON format | false |
 | `--parallel` | `-p` | Max parallel checks to run | 4 |
 | `--verbose` | `-v` | Show all check results, not just failures | false |
+| `--tags` | | Run only checks with ANY of these tags (comma-separated, OR logic) | — |
+| `--exclude-tags` | | Exclude checks with ANY of these tags (comma-separated, OR logic) | — |
 
 ### Commands
 
@@ -104,6 +106,16 @@ vibeguard check fmt          # Run only the 'fmt' check
 vibeguard check -v           # Run all checks with verbose output
 vibeguard check --fail-fast  # Stop on first failure
 vibeguard check --json       # Output results in JSON format
+```
+
+**Tag Filtering:**
+
+Run checks matching specific tags using `--tags` and `--exclude-tags`:
+
+```bash
+vibeguard check --tags format,lint     # Run checks tagged with 'format' OR 'lint'
+vibeguard check --exclude-tags slow    # Skip checks tagged with 'slow'
+vibeguard check --tags ci --exclude-tags manual  # Run 'ci' checks, but skip 'manual'
 ```
 
 For JSON output format details, see [JSON Output Schema](docs/JSON-OUTPUT-SCHEMA.md).
@@ -132,6 +144,15 @@ List all checks defined in the configuration file, showing IDs, commands, and de
 ```bash
 vibeguard list              # Show all checks
 vibeguard list --json       # Show checks in JSON format
+vibeguard list --tags security  # Filter list to security checks only
+```
+
+#### `vibeguard tags`
+
+List all unique tags defined in the configuration file, useful for discovering available tags for filtering.
+
+```bash
+vibeguard tags              # Show all tags in the config
 ```
 
 #### `vibeguard validate`
@@ -525,6 +546,89 @@ grok:
   - 'completed in %{NUMBER:duration}ms'
   - 'latency:\s*%{NUMBER:latency}(ms|s)'
 ```
+
+### Check Tags
+
+Add arbitrary tags to checks for flexible filtering and categorization:
+
+```yaml
+checks:
+  - id: fmt
+    run: gofmt -l .
+    tags: [format, fast, pre-commit]
+    severity: error
+
+  - id: test
+    run: go test ./...
+    tags: [test, slow, ci]
+    severity: error
+
+  - id: security-scan
+    run: gosec ./...
+    tags: [security, slow, ci-only]
+    severity: error
+```
+
+**Tag Features:**
+- Tags are optional (omit `tags` field for checks without tags)
+- Multiple tags per check allowed
+- Tags are case-sensitive (must be lowercase)
+- Format: alphanumeric with hyphens (`^[a-z][a-z0-9-]*$`)
+
+**Standard Tag Conventions** (not enforced, but recommended):
+
+| Tag | Description |
+|-----|-------------|
+| `format` | Code formatting checks |
+| `lint` | Static analysis / linting |
+| `test` | Unit/integration tests |
+| `security` | Security scanning |
+| `build` | Compilation / build checks |
+| `fast` | Quick checks (<5 seconds) |
+| `slow` | Long-running checks (>30 seconds) |
+| `pre-commit` | Suitable for pre-commit hooks |
+| `ci` | CI/CD pipeline checks |
+| `llm` | LLM-powered checks |
+
+**Filtering by Tags:**
+
+Use CLI flags to run only checks matching specific tags:
+
+```bash
+# Run checks with ANY of the specified tags (OR logic)
+vibeguard check --tags format,lint
+
+# Exclude checks with ANY of the specified tags
+vibeguard check --exclude-tags slow
+
+# Combine inclusion and exclusion
+vibeguard check --tags fast --exclude-tags lint
+
+# Discover available tags
+vibeguard tags
+```
+
+**Dependency Handling with Tags:**
+
+When filtering by tags, dependency resolution follows strict filtering:
+- Only checks matching the tag filter are run
+- If a filtered check depends on an excluded check, the check is skipped with a warning
+- Dependencies are NOT automatically included
+
+Example:
+```yaml
+checks:
+  - id: fmt
+    run: gofmt -l .
+    tags: [format]
+
+  - id: test
+    run: go test ./...
+    tags: [test]
+    requires: [fmt]
+```
+
+Running `vibeguard check --tags test` will skip the `test` check because its required dependency `fmt` is not included in the filtered set.
 
 ### Check Dependencies
 
