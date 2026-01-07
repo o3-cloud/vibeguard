@@ -26,6 +26,11 @@ func (e *ExitError) Error() string {
 	return fmt.Sprintf("exit code %d", e.Code)
 }
 
+var (
+	tags        []string
+	excludeTags []string
+)
+
 var checkCmd = &cobra.Command{
 	Use:   "check [id]",
 	Short: "Run checks",
@@ -34,13 +39,17 @@ var checkCmd = &cobra.Command{
 Examples:
   vibeguard check           Run all checks
   vibeguard check fmt       Run only the 'fmt' check
-  vibeguard check -v        Run all checks with verbose output`,
+  vibeguard check -v        Run all checks with verbose output
+  vibeguard check --tags security,lint    Run checks tagged with security or lint
+  vibeguard check --exclude-tags slow     Run all checks except those tagged slow`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: runCheck,
 }
 
 func init() {
 	rootCmd.AddCommand(checkCmd)
+	checkCmd.Flags().StringSliceVar(&tags, "tags", nil, "Run checks matching ANY of these tags (comma-separated)")
+	checkCmd.Flags().StringSliceVar(&excludeTags, "exclude-tags", nil, "Exclude checks matching ANY of these tags (comma-separated)")
 }
 
 func runCheck(cmd *cobra.Command, args []string) error {
@@ -53,6 +62,14 @@ func runCheck(cmd *cobra.Command, args []string) error {
 	// Create executor and orchestrator
 	exec := executor.New("")
 	orch := orchestrator.New(cfg, exec, parallel, failFast, verbose, logDir, GetErrorExitCode())
+
+	// Set tag filter if specified
+	if len(tags) > 0 || len(excludeTags) > 0 {
+		orch.SetTagFilter(orchestrator.TagFilter{
+			Include: tags,
+			Exclude: excludeTags,
+		})
+	}
 
 	// Create formatter - use stderr for Claude Code hook visibility
 	formatter := output.New(os.Stderr, verbose)

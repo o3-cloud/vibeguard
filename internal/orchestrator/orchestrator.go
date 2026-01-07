@@ -48,6 +48,12 @@ type Violation struct {
 	LogFile    string // Path to log file containing check output
 }
 
+// TagFilter specifies which checks to include/exclude based on tags.
+type TagFilter struct {
+	Include []string // Run checks matching ANY of these tags (OR logic)
+	Exclude []string // Exclude checks matching ANY of these tags (OR logic)
+}
+
 // Orchestrator coordinates check execution.
 type Orchestrator struct {
 	executor      *executor.Executor
@@ -57,6 +63,7 @@ type Orchestrator struct {
 	verbose       bool
 	logDir        string // Directory for check output logs
 	errorExitCode int    // Configurable exit code for failures (default: 1)
+	tagFilter     *TagFilter
 }
 
 // DefaultLogDir is the default directory for check output logs.
@@ -70,6 +77,11 @@ func WithErrorExitCode(code int) Option {
 	return func(o *Orchestrator) {
 		o.errorExitCode = code
 	}
+}
+
+// SetTagFilter sets the tag filter for selective check execution.
+func (o *Orchestrator) SetTagFilter(filter TagFilter) {
+	o.tagFilter = &filter
 }
 
 // New creates a new Orchestrator.
