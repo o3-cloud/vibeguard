@@ -10,6 +10,7 @@ checks:
     suggestion: "go vet found issues in the codebase"
     fix: "go vet ./..."
     timeout: 5s
+    tags: [lint, fast, pre-commit]
 
   - id: fmt
     run: test -z "$(gofmt -l .)"
@@ -17,6 +18,7 @@ checks:
     suggestion: "Code is not properly formatted"
     fix: "Fix the formatting issues"
     timeout: 5s
+    tags: [format, fast, pre-commit]
 
   - id: actionlint
     run: actionlint
@@ -24,6 +26,7 @@ checks:
     suggestion: "GitHub Actions workflows have validation errors (deprecated actions, syntax errors, or unsafe shell interpolation)"
     fix: "Review actionlint output and fix the reported issues"
     timeout: 10s
+    tags: [lint, ci]
 
   - id: lint
     run: golangci-lint run {{.go_packages}}
@@ -31,6 +34,7 @@ checks:
     suggestion: "golangci-lint found lint issues"
     fix: "Fix the linter issues"
     timeout: 5s
+    tags: [lint, fast, pre-commit]
 
   - id: staticcheck
     run: staticcheck {{.go_packages}}
@@ -38,6 +42,7 @@ checks:
     suggestion: "staticcheck found issues in the codebase"
     fix: "Fix the staticcheck issues"
     timeout: 5s
+    tags: [lint, security, fast, pre-commit]
 
   - id: test
     run: go test -race {{.go_packages}}
@@ -45,6 +50,7 @@ checks:
     suggestion: "Some tests are failing"
     fix: "Fix the failing tests"
     timeout: 20s
+    tags: [test, pre-commit]
 
   - id: test-coverage
     run: go test ./... -coverprofile cover.out && go tool cover -func cover.out
@@ -54,6 +60,7 @@ checks:
     suggestion: "Coverage is {{.coverage}}%, need 89%"
     fix: "Add more test cases to improve coverage"
     timeout: 20s
+    tags: [test, ci]
 
   - id: build
     run: go build -o vibeguard ./cmd/vibeguard
@@ -61,6 +68,7 @@ checks:
     suggestion: "Build failed with compilation errors"
     fix: "Fix the build errors"
     timeout: 5s
+    tags: [build, fast, pre-commit]
     requires:
       - vet
 
@@ -70,6 +78,7 @@ checks:
     suggestion: "gosec found security vulnerabilities"
     fix: "Fix the security issues"
     timeout: 30s
+    tags: [security, slow, ci]
 
   - id: docker
     run: checkov -d . --framework dockerfile
@@ -77,3 +86,4 @@ checks:
     suggestion: checkov found issues in the Dockerfile
     fix: "Fix the issues reported by checkov"
     timeout: 30s
+    tags: [security, ci, slow]
