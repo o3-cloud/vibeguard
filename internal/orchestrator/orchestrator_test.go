@@ -2377,3 +2377,59 @@ func TestRun_Race_HighConcurrencyWithDependencies(t *testing.T) {
 	verifyOrder("l2-a", "l3-a")
 	verifyOrder("l2-b", "l3-a")
 }
+
+// TestTagFilter_NoMatches verifies that filtering with non-existent tags returns
+// an empty result set without error (silently ignores non-matching tags).
+func TestTagFilter_NoMatches(t *testing.T) {
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{
+				ID:       "fmt",
+				Run:      "exit 0",
+				Tags:     []string{"format", "fast", "pre-commit"},
+				Severity: config.SeverityError,
+			},
+			{
+				ID:       "test",
+				Run:      "exit 0",
+				Tags:     []string{"test", "slow", "ci"},
+				Severity: config.SeverityError,
+			},
+			{
+				ID:       "security",
+				Run:      "exit 0",
+				Tags:     []string{"security", "slow", "ci"},
+				Severity: config.SeverityError,
+			},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 1, false, false, "", 1)
+
+	// Filter with a non-existent tag
+	orch.SetTagFilter(TagFilter{
+		Include: []string{"nonexistent"},
+	})
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should have no results (no checks matched the filter)
+	if len(result.Results) != 0 {
+		t.Errorf("expected 0 results for non-matching tag, got %d", len(result.Results))
+	}
+
+	// Should have no violations
+	if len(result.Violations) != 0 {
+		t.Errorf("expected 0 violations, got %d", len(result.Violations))
+	}
+
+	// Exit code should be 0 (no violations, no error)
+	if result.ExitCode != 0 {
+		t.Errorf("expected exit code 0 for no matches (no error), got %d", result.ExitCode)
+	}
+}
