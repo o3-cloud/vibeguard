@@ -10,7 +10,7 @@ checks:
     suggestion: "go vet found issues in the codebase"
     fix: "go vet ./..."
     timeout: 5s
-    tags: [lint, fast, pre-commit]
+    tags: [lint, fast, pre-commit, build]
 
   - id: fmt
     run: test -z "$(gofmt -l .)"
