@@ -29,22 +29,26 @@ func runList(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	fmt.Printf("Checks (%d):\n\n", len(cfg.Checks))
+	out := cmd.OutOrStdout()
+	_, _ = fmt.Fprintf(out, "Checks (%d):\n\n", len(cfg.Checks))
 
 	for _, check := range cfg.Checks {
-		fmt.Printf("  %s\n", check.ID)
+		_, _ = fmt.Fprintf(out, "  %s\n", check.ID)
 
 		if verbose {
-			fmt.Printf("    Command:  %s\n", check.Run)
-			fmt.Printf("    Severity: %s\n", check.Severity)
-			fmt.Printf("    Timeout:  %s\n", check.Timeout.AsDuration())
+			if len(check.Tags) > 0 {
+				_, _ = fmt.Fprintf(out, "    Tags:     %s\n", strings.Join(check.Tags, ", "))
+			}
+			_, _ = fmt.Fprintf(out, "    Command:  %s\n", check.Run)
+			_, _ = fmt.Fprintf(out, "    Severity: %s\n", check.Severity)
+			_, _ = fmt.Fprintf(out, "    Timeout:  %s\n", check.Timeout.AsDuration())
 			if len(check.Requires) > 0 {
-				fmt.Printf("    Requires: %s\n", strings.Join(check.Requires, ", "))
+				_, _ = fmt.Fprintf(out, "    Requires: %s\n", strings.Join(check.Requires, ", "))
 			}
 			if check.Suggestion != "" {
-				fmt.Printf("    Suggestion: %s\n", check.Suggestion)
+				_, _ = fmt.Fprintf(out, "    Suggestion: %s\n", check.Suggestion)
 			}
-			fmt.Println()
+			_, _ = fmt.Fprintln(out)
 		}
 	}
 

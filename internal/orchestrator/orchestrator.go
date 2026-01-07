@@ -154,12 +154,74 @@ func (o *Orchestrator) interpolatePath(path string) string {
 	return result
 }
 
+// filterChecksByTags applies tag-based filtering to the checks.
+// Returns a filtered list of checks and a set of excluded check IDs.
+func (o *Orchestrator) filterChecksByTags(checks []config.Check) ([]config.Check, map[string]bool) {
+	if o.tagFilter == nil || (len(o.tagFilter.Include) == 0 && len(o.tagFilter.Exclude) == 0) {
+		// No filter, return all checks
+		return checks, make(map[string]bool)
+	}
+
+	filtered := []config.Check{}
+	excluded := make(map[string]bool)
+
+	for _, check := range checks {
+		// Check inclusion: if Include is specified, check must match at least one tag
+		if len(o.tagFilter.Include) > 0 {
+			matchesInclude := false
+			for _, includeTag := range o.tagFilter.Include {
+				for _, checkTag := range check.Tags {
+					if includeTag == checkTag {
+						matchesInclude = true
+						break
+					}
+				}
+				if matchesInclude {
+					break
+				}
+			}
+			if !matchesInclude {
+				excluded[check.ID] = true
+				continue
+			}
+		}
+
+		// Check exclusion: skip if matches any exclude tag
+		if len(o.tagFilter.Exclude) > 0 {
+			matchesExclude := false
+			for _, excludeTag := range o.tagFilter.Exclude {
+				for _, checkTag := range check.Tags {
+					if excludeTag == checkTag {
+						matchesExclude = true
+						break
+					}
+				}
+				if matchesExclude {
+					break
+				}
+			}
+			if matchesExclude {
+				excluded[check.ID] = true
+				continue
+			}
+		}
+
+		// Check passed both inclusion and exclusion filters
+		filtered = append(filtered, check)
+	}
+
+	return filtered, excluded
+}
+
 // Run executes all checks and returns the results.
 func (o *Orchestrator) Run(ctx context.Context) (*RunResult, error) {
 	start := time.Now()
 
+	// Apply tag filtering
+	filteredChecks, excludedByTag := o.filterChecksByTags(o.config.Checks)
+
 	// Build dependency graph to determine execution order
-	graph, err := BuildGraph(o.config.Checks)
+	graph, err := BuildGraph(filteredChecks)
 	if err != nil {
 		return nil, err
 	}
@@ -167,9 +229,9 @@ func (o *Orchestrator) Run(ctx context.Context) (*RunResult, error) {
 	// Build lookup maps for checks by ID and index by ID
 	checkByID := make(map[string]*config.Check)
 	checkIndexByID := make(map[string]int)
-	for i := range o.config.Checks {
-		checkByID[o.config.Checks[i].ID] = &o.config.Checks[i]
-		checkIndexByID[o.config.Checks[i].ID] = i
+	for i := range filteredChecks {
+		checkByID[filteredChecks[i].ID] = &filteredChecks[i]
+		checkIndexByID[filteredChecks[i].ID] = i
 	}
 
 	results := make([]*CheckResult, 0, len(o.config.Checks))
@@ -225,17 +287,24 @@ func (o *Orchestrator) Run(ctx context.Context) (*RunResult, error) {
 					mu.Unlock()
 					return nil
 				}
-				// Verify all dependencies passed
+				// Verify all dependencies passed and are not excluded by tag filter
 				allDepsPassed := true
+				missingDep := ""
 				for _, depID := range check.Requires {
+					if excludedByTag[depID] {
+						allDepsPassed = false
+						missingDep = depID
+						break
+					}
 					if !passedChecks[depID] {
 						allDepsPassed = false
+						missingDep = depID
 						break
 					}
 				}
 				mu.Unlock()
 
-				// Skip this check if a required dependency failed
+				// Skip this check if a required dependency failed or is excluded by tag filter
 				if !allDepsPassed {
 					result := &CheckResult{
 						Check:  check,
@@ -248,11 +317,18 @@ func (o *Orchestrator) Run(ctx context.Context) (*RunResult, error) {
 						Extracted: make(map[string]string),
 					}
 
+					var suggestion string
+					if excludedByTag[missingDep] {
+						suggestion = fmt.Sprintf("Skipped: required dependency %q not in filtered set", missingDep)
+					} else {
+						suggestion = "Skipped: required dependency failed"
+					}
+
 					violation := &Violation{
 						CheckID:    check.ID,
 						Severity:   check.Severity,
 						Command:    check.Run,
-						Suggestion: "Skipped: required dependency failed",
+						Suggestion: suggestion,
 						Fix:        check.Fix,
 						Extracted:  result.Extracted,
 					}
