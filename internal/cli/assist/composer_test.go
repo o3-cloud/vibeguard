@@ -66,10 +66,9 @@ func TestComposerCompose(t *testing.T) {
 	// Check that all expected sections are present
 	expectedSections := []string{
 		"# VibeGuard AI Agent Setup Guide",
-		"## Project Analysis",
+		"## Your Project",
 		"**Project Name:** github.com/example/myapp",
-		"**Project Type:** go",
-		"**Detection Confidence:** 100%",
+		"analyze the project structure",
 		"golangci-lint",
 		"## Recommended Checks",
 		"fmt (format)",
@@ -105,7 +104,7 @@ func TestComposerComposeWithOptions(t *testing.T) {
 		if !strings.Contains(prompt, "# VibeGuard AI Agent Setup Guide") {
 			t.Error("Minimal should include header")
 		}
-		if !strings.Contains(prompt, "## Project Analysis") {
+		if !strings.Contains(prompt, "## Your Project") {
 			t.Error("Minimal should include analysis")
 		}
 		if !strings.Contains(prompt, "## Your Task") {
@@ -187,17 +186,14 @@ func TestProjectAnalysisSection(t *testing.T) {
 
 	section := ProjectAnalysisSection(analysis)
 
+	// New format delegates analysis to the agent, so check for guidance instead
 	expectedContents := []string{
 		"**Project Name:** my-app",
-		"**Project Type:** python",
-		"**Detection Confidence:** 85%",
-		"**Language Version:** 3.11",
-		"- black (config: pyproject.toml)",
-		"- pytest",
-		"- Source directories: src",
-		"- Test directories: tests",
-		"- Entry points: src/main.py",
-		"- Build output: dist",
+		"Initial Analysis Instructions",
+		"Project Type & Language",
+		"Detected Tools",
+		"Project Structure",
+		"Existing Quality Tools",
 	}
 
 	for _, expected := range expectedContents {
@@ -287,11 +283,14 @@ func TestTaskSection(t *testing.T) {
 	if !strings.Contains(section.Content, "## Your Task") {
 		t.Error("Task section should have title")
 	}
-	if !strings.Contains(section.Content, "# vibeguard.yaml for my-project") {
+	if !strings.Contains(section.Content, "my-project") {
 		t.Error("Task section should mention project name")
 	}
-	if !strings.Contains(section.Content, "version: \"1\"") {
-		t.Error("Task section should show version requirement")
+	if !strings.Contains(section.Content, "Option A: Use a Template") {
+		t.Error("Task section should describe template approach")
+	}
+	if !strings.Contains(section.Content, "vibeguard init --list-templates") {
+		t.Error("Task section should show how to list templates")
 	}
 }
 
@@ -498,9 +497,9 @@ func TestPromptTokenEstimate(t *testing.T) {
 	// Rough estimate: 4 characters per token
 	estimatedTokens := len(prompt) / 4
 
-	// Target is < 4500 tokens (increased from 4000 to accommodate TemplateDiscoverySection)
-	if estimatedTokens > 4500 {
-		t.Errorf("Prompt exceeds 4500 token estimate: ~%d tokens (%d chars)", estimatedTokens, len(prompt))
+	// Target is < 5500 tokens (increased to accommodate expanded TaskSection with step-by-step guidance)
+	if estimatedTokens > 5500 {
+		t.Errorf("Prompt exceeds 5500 token estimate: ~%d tokens (%d chars)", estimatedTokens, len(prompt))
 	}
 
 	t.Logf("Prompt length: %d chars, ~%d tokens", len(prompt), estimatedTokens)

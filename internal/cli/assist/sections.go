@@ -30,48 +30,17 @@ generate a valid configuration.`,
 func ProjectAnalysisSection(analysis *ProjectAnalysis) PromptSection {
 	var sb strings.Builder
 
-	sb.WriteString("## Project Analysis\n\n")
-	sb.WriteString(fmt.Sprintf("**Project Name:** %s\n", analysis.Name))
-	sb.WriteString(fmt.Sprintf("**Project Type:** %s\n", analysis.ProjectType))
-	sb.WriteString(fmt.Sprintf("**Detection Confidence:** %.0f%%\n", analysis.Confidence*100))
-	if analysis.LanguageVersion != "" {
-		sb.WriteString(fmt.Sprintf("**Language Version:** %s\n", analysis.LanguageVersion))
-	}
-
-	// Tools detected
-	if len(analysis.DetectedTools) > 0 {
-		sb.WriteString("\n### Main Tools Detected:\n")
-		for _, tool := range analysis.DetectedTools {
-			if tool.ConfigFile != "" {
-				sb.WriteString(fmt.Sprintf("- %s (config: %s)\n", tool.Name, tool.ConfigFile))
-			} else {
-				sb.WriteString(fmt.Sprintf("- %s\n", tool.Name))
-			}
-		}
-	}
-
-	// Project structure
-	sb.WriteString("\n### Project Structure:\n")
-	if len(analysis.SourceDirs) > 0 {
-		sb.WriteString(fmt.Sprintf("- Source directories: %s\n", strings.Join(analysis.SourceDirs, ", ")))
-	}
-	if len(analysis.TestDirs) > 0 {
-		sb.WriteString(fmt.Sprintf("- Test directories: %s\n", strings.Join(analysis.TestDirs, ", ")))
-	}
-	if len(analysis.EntryPoints) > 0 {
-		sb.WriteString(fmt.Sprintf("- Entry points: %s\n", strings.Join(analysis.EntryPoints, ", ")))
-	}
-
-	// Build system
-	sb.WriteString("\n### Build System:\n")
-	if analysis.BuildOutputDir != "" {
-		sb.WriteString(fmt.Sprintf("- Build output: %s\n", analysis.BuildOutputDir))
-	} else {
-		sb.WriteString("- Build output: default\n")
-	}
+	sb.WriteString("## Your Project\n\n")
+	sb.WriteString(fmt.Sprintf("**Project Name:** %s\n\n", analysis.Name))
+	sb.WriteString("### Initial Analysis Instructions\n\n")
+	sb.WriteString("Before proceeding, analyze the project structure to understand:\n\n")
+	sb.WriteString("1. **Project Type & Language**: Examine the directory structure, file extensions, and package managers to identify the primary language and framework (Go, Node.js/TypeScript, Python, Rust, Java, Ruby, etc.)\n")
+	sb.WriteString("2. **Detected Tools**: Look for configuration files like `go.mod`, `package.json`, `pyproject.toml`, `Cargo.toml`, `pom.xml`, `Gemfile` to identify build systems, package managers, and development tools\n")
+	sb.WriteString("3. **Project Structure**: Identify source directories, test directories, entry points, and build output locations\n")
+	sb.WriteString("4. **Existing Quality Tools**: Check for configuration files for linters, formatters, and test frameworks (eslint, pytest, golangci-lint, cargo, etc.)\n\n")
 
 	return PromptSection{
-		Title:   "Project Analysis",
+		Title:   "Your Project",
 		Content: sb.String(),
 	}
 }
@@ -83,25 +52,22 @@ func TemplateDiscoverySection(projectType string) PromptSection {
 	sb.WriteString("## Available Templates\n\n")
 	sb.WriteString("Rather than creating a custom configuration from scratch, you can use one of VibeGuard's predefined templates that are optimized for specific languages and frameworks.\n\n")
 
-	sb.WriteString("### Discover Templates\n\n")
-	sb.WriteString("To see all available templates, run:\n\n")
+	sb.WriteString("### Discover Available Templates\n\n")
+	sb.WriteString("Run this command to see all available templates:\n\n")
 	sb.WriteString("```bash\n")
 	sb.WriteString("vibeguard init --list-templates\n")
 	sb.WriteString("```\n\n")
+	sb.WriteString("This will display all templates with their descriptions and supported languages/frameworks.\n\n")
 
-	sb.WriteString("### Template Recommendation\n\n")
-	if projectType != "" {
-		// Provide a specific recommendation based on project type
-		templateName := getTemplateRecommendation(projectType)
-		sb.WriteString(fmt.Sprintf("Based on the detected project type (**%s**), try this template:\n\n", projectType))
-		sb.WriteString("```bash\n")
-		sb.WriteString(fmt.Sprintf("vibeguard init --template %s\n", templateName))
-		sb.WriteString("```\n\n")
-	}
+	sb.WriteString("### Selecting a Template\n\n")
+	sb.WriteString("Based on your project analysis from the previous step:\n\n")
+	sb.WriteString("1. **Match your language/framework**: Find the template that best matches the project type you identified\n")
+	sb.WriteString("2. **Review the template**: Use `vibeguard init --list-templates` to see what each template covers\n")
+	sb.WriteString("3. **Try the template**: Run `vibeguard init --template <template-name>` to use a predefined template\n\n")
 
 	sb.WriteString("### When to Use Templates\n\n")
 	sb.WriteString("Use a predefined template when:\n")
-	sb.WriteString("- You want quick setup with reasonable defaults\n")
+	sb.WriteString("- You want quick setup with reasonable defaults for your language/framework\n")
 	sb.WriteString("- Your project matches the template's language/framework\n")
 	sb.WriteString("- You're happy with the template's default checks\n\n")
 
@@ -111,7 +77,7 @@ func TemplateDiscoverySection(projectType string) PromptSection {
 	sb.WriteString("- You have specific checks not in standard templates\n")
 	sb.WriteString("- You want fine-grained control over all settings\n\n")
 
-	sb.WriteString("You can also start with a template and modify it to suit your needs.")
+	sb.WriteString("You can also start with a template and modify it to suit your project's specific needs.")
 
 	return PromptSection{
 		Title:   "Available Templates",
@@ -119,28 +85,35 @@ func TemplateDiscoverySection(projectType string) PromptSection {
 	}
 }
 
-// getTemplateRecommendation returns a recommended template for a given project type.
-func getTemplateRecommendation(projectType string) string {
-	switch projectType {
-	case "go":
-		return "go-standard"
-	case "node", "javascript", "typescript":
-		return "node-typescript"
-	case "python":
-		return "python-pip"
-	case "rust":
-		return "rust-cargo"
-	case "java":
-		return "generic"
-	default:
-		return "generic"
-	}
-}
-
 // RecommendationsSection generates the recommended checks section.
+// If recommendations is empty, it provides guidance on identifying checks from existing tools.
 func RecommendationsSection(recommendations []CheckRecommendation) PromptSection {
 	var sb strings.Builder
 
+	if len(recommendations) == 0 {
+		// No recommendations provided - guide the agent to identify checks from tools
+		sb.WriteString("## Identifying Quality Checks\n\n")
+		sb.WriteString("Based on your project analysis, you should identify the appropriate quality checks to include in the VibeGuard configuration.\n\n")
+		sb.WriteString("### How to Identify Checks\n\n")
+		sb.WriteString("For each quality tool or framework found in your analysis:\n\n")
+		sb.WriteString("1. **Determine the command**: What command runs the tool? (e.g., `go test ./...`, `npm test`, `pytest`)\n")
+		sb.WriteString("2. **Identify assertions**: What does success look like? (e.g., exit code 0, specific output patterns)\n")
+		sb.WriteString("3. **Set severity**: Is this critical (error) or a warning?\n")
+		sb.WriteString("4. **Add context**: Write a description explaining why this check is important\n\n")
+		sb.WriteString("### Examples of Common Checks\n\n")
+		sb.WriteString("- **Tests**: Run your test suite and ensure it passes\n")
+		sb.WriteString("- **Linting**: Run code quality/style checkers\n")
+		sb.WriteString("- **Type Checking**: Run type checkers (TypeScript, mypy, etc.)\n")
+		sb.WriteString("- **Security**: Run security scanners (gosec, bandit, npm audit)\n")
+		sb.WriteString("- **Coverage**: Verify test coverage meets threshold\n")
+		sb.WriteString("- **Formatting**: Ensure code is properly formatted\n")
+		return PromptSection{
+			Title:   "Identifying Quality Checks",
+			Content: sb.String(),
+		}
+	}
+
+	// Recommendations provided - show them (backward compatibility)
 	sb.WriteString("## Recommended Checks\n\n")
 	sb.WriteString("Based on the detected tools, here are the recommended checks:\n\n")
 
@@ -524,43 +497,58 @@ func TaskSection(projectName string) PromptSection {
 		Title: "Your Task",
 		Content: fmt.Sprintf(`## Your Task
 
-Based on the project analysis above, generate a vibeguard.yaml configuration that:
+Based on your project analysis above, follow these steps to set up VibeGuard for the %s project:
 
-1. Includes version: "1"
-2. Defines appropriate variables for this project
-3. Creates checks for the detected tools
-4. Follows the syntax rules described above
-5. Includes helpful suggestions for each check
-6. Uses appropriate timeouts for each check type
+### Step 1: Choose Your Approach
 
-Output the configuration in a YAML code block:
+You have two options:
 
-`+"```yaml"+`
-# vibeguard.yaml for %s
-version: "1"
+**Option A: Use a Template (Recommended for most projects)**
+- Run: `+"```bash"+`vibeguard init --list-templates`+"```"+`
+- Find a template that matches your project type
+- Run: `+"```bash"+`vibeguard init --template <template-name>`+"```"+`
+- This creates a predefined vibeguard.yaml configuration optimized for your language/framework
 
-vars:
-  # ... your variables ...
+**Option B: Create a Custom Configuration**
+- If no template fits your needs, create a custom vibeguard.yaml
+- Based on your analysis, identify the quality checks and tools to include
+- Follow the Configuration Requirements section above
+- Ensure each check has a clear purpose and appropriate settings
 
-checks:
-  # ... your checks ...
+### Step 2: Validate Your Configuration
+
+Once you have a vibeguard.yaml file, validate it:
+
+`+"```bash"+`
+vibeguard validate
 `+"```"+`
 
-After generating the configuration:
+This verifies the configuration has correct YAML syntax and adheres to the vibeguard schema.
 
-1. **Validate the YAML syntax and schema:**
-   `+"```bash"+`
-   vibeguard validate
-   `+"```"+`
-   This verifies the configuration file has correct YAML syntax and adheres to the vibeguard schema.
+### Step 3: Test Your Checks
 
-2. **Run the checks to verify they execute properly:**
-   `+"```bash"+`
-   vibeguard check
-   `+"```"+`
-   This runs all defined checks and ensures they execute successfully. Fix any failing checks before considering the task complete.
+Run the checks to ensure they execute properly:
 
-Only consider this task complete when both commands pass without errors.`, projectName),
+`+"```bash"+`
+vibeguard check
+`+"```"+`
+
+Review any failures and fix them:
+- Adjust commands if tools aren't found
+- Update assertions if they don't match your project's output
+- Add variable definitions if needed
+- Adjust timeouts if checks are timing out
+
+### Step 4: Commit the Configuration
+
+Once all checks pass, save the vibeguard.yaml file to your project repository. This ensures the configuration is version-controlled and used by all team members.
+
+### Success Criteria
+
+Your task is complete when:
+- ✅ vibeguard validate passes without errors
+- ✅ vibeguard check runs all checks successfully
+- ✅ vibeguard.yaml is committed to the repository`, projectName),
 	}
 }
 

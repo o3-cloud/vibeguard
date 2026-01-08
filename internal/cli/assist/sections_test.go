@@ -19,17 +19,18 @@ func TestProjectAnalysisSection_EmptyAnalysis(t *testing.T) {
 		t.Error("should contain project name")
 	}
 
-	// Should not crash with empty slices
-	if strings.Contains(section.Content, "Main Tools Detected") {
-		t.Error("should not include tools section when DetectedTools is empty")
+	// New format: should guide agent to analyze the project
+	if !strings.Contains(section.Content, "analyze the project structure") {
+		t.Error("should contain guidance to analyze project")
 	}
-	if strings.Contains(section.Content, "Source directories") {
-		t.Error("should not include source directories when SourceDirs is empty")
+	if !strings.Contains(section.Content, "Project Type & Language") {
+		t.Error("should ask agent to identify project type")
 	}
 }
 
 func TestProjectAnalysisSection_WithTools(t *testing.T) {
 	// Test boundary: len(DetectedTools) > 0
+	// Note: New implementation delegates tool detection to the agent
 	analysis := &ProjectAnalysis{
 		Name:        "tool-project",
 		ProjectType: "go",
@@ -42,19 +43,18 @@ func TestProjectAnalysisSection_WithTools(t *testing.T) {
 
 	section := ProjectAnalysisSection(analysis)
 
-	if !strings.Contains(section.Content, "Main Tools Detected") {
-		t.Error("should include tools section when tools are present")
+	// New format: should ask agent to analyze tools
+	if !strings.Contains(section.Content, "Detected Tools") {
+		t.Error("should ask agent to identify detected tools")
 	}
-	if !strings.Contains(section.Content, "golangci-lint (config: .golangci.yml)") {
-		t.Error("should include tool with config file")
-	}
-	if !strings.Contains(section.Content, "- gofmt") {
-		t.Error("should include tool without config file")
+	if !strings.Contains(section.Content, "configuration files") {
+		t.Error("should mention looking for configuration files")
 	}
 }
 
 func TestProjectAnalysisSection_WithDirectories(t *testing.T) {
 	// Test boundaries: len(SourceDirs) > 0, len(TestDirs) > 0, len(EntryPoints) > 0
+	// Note: New implementation delegates directory analysis to the agent
 	analysis := &ProjectAnalysis{
 		Name:           "dir-project",
 		ProjectType:    "node",
@@ -66,19 +66,18 @@ func TestProjectAnalysisSection_WithDirectories(t *testing.T) {
 
 	section := ProjectAnalysisSection(analysis)
 
-	if !strings.Contains(section.Content, "Source directories: src, lib") {
-		t.Error("should include source directories")
+	// New format: should ask agent to identify directories
+	if !strings.Contains(section.Content, "Project Structure") {
+		t.Error("should ask agent to identify project structure")
 	}
-	if !strings.Contains(section.Content, "Test directories: test, spec") {
-		t.Error("should include test directories")
-	}
-	if !strings.Contains(section.Content, "Entry points: src/index.js") {
-		t.Error("should include entry points")
+	if !strings.Contains(section.Content, "directory structure") {
+		t.Error("should mention examining directory structure")
 	}
 }
 
 func TestProjectAnalysisSection_OnlyTestDirs(t *testing.T) {
 	// Test boundary: len(TestDirs) > 0 in isolation
+	// Note: New implementation delegates directory analysis to the agent
 	analysis := &ProjectAnalysis{
 		Name:        "test-only",
 		ProjectType: "python",
@@ -87,16 +86,15 @@ func TestProjectAnalysisSection_OnlyTestDirs(t *testing.T) {
 
 	section := ProjectAnalysisSection(analysis)
 
-	if !strings.Contains(section.Content, "Test directories: tests") {
-		t.Error("should include test directories when only TestDirs present")
-	}
-	if strings.Contains(section.Content, "Source directories") {
-		t.Error("should not include source directories when empty")
+	// New format: should ask agent to identify all directories
+	if !strings.Contains(section.Content, "Initial Analysis Instructions") {
+		t.Error("should ask agent for initial analysis")
 	}
 }
 
 func TestProjectAnalysisSection_OnlyEntryPoints(t *testing.T) {
 	// Test boundary: len(EntryPoints) > 0 in isolation
+	// Note: New implementation delegates directory analysis to the agent
 	analysis := &ProjectAnalysis{
 		Name:        "entry-only",
 		ProjectType: "rust",
@@ -105,11 +103,9 @@ func TestProjectAnalysisSection_OnlyEntryPoints(t *testing.T) {
 
 	section := ProjectAnalysisSection(analysis)
 
-	if !strings.Contains(section.Content, "Entry points: src/main.rs") {
-		t.Error("should include entry points when present")
-	}
-	if strings.Contains(section.Content, "Test directories") {
-		t.Error("should not include test directories when empty")
+	// New format: should ask agent to identify entry points
+	if !strings.Contains(section.Content, "entry points") {
+		t.Error("should ask agent to identify entry points")
 	}
 }
 
