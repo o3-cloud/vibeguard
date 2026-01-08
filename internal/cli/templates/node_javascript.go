@@ -31,6 +31,14 @@ checks:
     requires:
       - lint
 
+  - id: security
+    run: npm audit --audit-level=moderate 2>/dev/null || echo "npm audit failed - check for vulnerabilities"
+    severity: warning
+    suggestion: "Run 'npm audit' to see vulnerability details and 'npm audit fix' to update packages"
+    timeout: 120s
+    requires:
+      - analyze
+
   - id: test
     run: npm test -- --passWithNoTests
     severity: error

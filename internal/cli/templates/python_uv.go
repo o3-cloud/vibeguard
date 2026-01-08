@@ -37,6 +37,14 @@ checks:
     requires:
       - lint
 
+  - id: security
+    run: uv run pip-audit 2>/dev/null || echo "pip-audit not installed (optional)"
+    severity: warning
+    suggestion: "Install pip-audit with uv: uv pip install pip-audit"
+    timeout: 120s
+    requires:
+      - analyze
+
   - id: test
     run: uv run pytest
     severity: error

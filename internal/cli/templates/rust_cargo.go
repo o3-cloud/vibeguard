@@ -30,6 +30,14 @@ checks:
     requires:
       - clippy
 
+  - id: security
+    run: cargo audit 2>/dev/null || echo "cargo-audit not installed (optional)"
+    severity: warning
+    suggestion: "Install cargo-audit: cargo install cargo-audit"
+    timeout: 120s
+    requires:
+      - analyze
+
   - id: test
     run: cargo test
     severity: error

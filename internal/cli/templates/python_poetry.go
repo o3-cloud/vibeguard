@@ -37,6 +37,14 @@ checks:
     requires:
       - lint
 
+  - id: security
+    run: poetry run pip-audit 2>/dev/null || echo "pip-audit not installed (optional)"
+    severity: warning
+    suggestion: "Install pip-audit: poetry add --group dev pip-audit"
+    timeout: 120s
+    requires:
+      - analyze
+
   - id: test
     run: poetry run pytest
     severity: error

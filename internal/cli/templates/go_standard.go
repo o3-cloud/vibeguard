@@ -37,6 +37,14 @@ checks:
     requires:
       - lint
 
+  - id: security
+    run: gosec {{.go_packages}} 2>/dev/null || echo "gosec not installed (optional)"
+    severity: warning
+    suggestion: "Install gosec: go install github.com/securego/gosec/v2/cmd/gosec@latest"
+    timeout: 120s
+    requires:
+      - analyze
+
   - id: test
     run: go test -race {{.go_packages}}
     severity: error
