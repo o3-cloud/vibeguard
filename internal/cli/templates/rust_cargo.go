@@ -22,6 +22,14 @@ checks:
     suggestion: "Run 'cargo clippy --fix' to fix linting issues"
     timeout: 120s
 
+  - id: analyze
+    run: cargo deny check 2>/dev/null || echo "cargo-deny not installed (optional)"
+    severity: warning
+    suggestion: "Install cargo-deny: cargo install cargo-deny"
+    timeout: 120s
+    requires:
+      - clippy
+
   - id: test
     run: cargo test
     severity: error

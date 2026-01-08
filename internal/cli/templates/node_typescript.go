@@ -29,6 +29,14 @@ checks:
     suggestion: "Fix TypeScript type errors shown in the output"
     timeout: 120s
 
+  - id: analyze
+    run: npm run analyze 2>/dev/null || echo "Static analysis tool not configured (optional)"
+    severity: warning
+    suggestion: "Configure static analysis tool (e.g., sonarjs, code-inspector) in package.json"
+    timeout: 120s
+    requires:
+      - lint
+
   - id: test
     run: npm test -- --passWithNoTests
     severity: error

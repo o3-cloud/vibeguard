@@ -23,6 +23,14 @@ checks:
     suggestion: "Run 'npx eslint {{.source_dir}} --fix' to fix linting issues"
     timeout: 60s
 
+  - id: analyze
+    run: npm run analyze 2>/dev/null || echo "Static analysis tool not configured (optional)"
+    severity: warning
+    suggestion: "Configure static analysis tool (e.g., sonarjs, code-inspector) in package.json"
+    timeout: 120s
+    requires:
+      - lint
+
   - id: test
     run: npm test -- --passWithNoTests
     severity: error

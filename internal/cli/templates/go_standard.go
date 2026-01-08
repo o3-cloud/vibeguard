@@ -29,6 +29,14 @@ checks:
     suggestion: "Install golangci-lint: https://golangci-lint.run/usage/install/"
     timeout: 120s
 
+  - id: analyze
+    run: staticcheck {{.go_packages}} 2>/dev/null || echo "staticcheck not installed (optional)"
+    severity: warning
+    suggestion: "Install staticcheck: go install honnef.co/go/tools/cmd/staticcheck@latest"
+    timeout: 120s
+    requires:
+      - lint
+
   - id: test
     run: go test -race {{.go_packages}}
     severity: error

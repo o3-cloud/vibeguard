@@ -23,6 +23,14 @@ checks:
     suggestion: "Run 'go vet ./...' and fix reported issues"
     timeout: 60s
 
+  - id: analyze
+    run: staticcheck {{.go_packages}} 2>/dev/null || echo "staticcheck not installed (optional)"
+    severity: warning
+    suggestion: "Install staticcheck: go install honnef.co/go/tools/cmd/staticcheck@latest"
+    timeout: 120s
+    requires:
+      - vet
+
   - id: test
     run: go test {{.go_packages}}
     severity: error

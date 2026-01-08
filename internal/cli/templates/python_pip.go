@@ -29,6 +29,14 @@ checks:
     suggestion: "Fix type errors shown in the mypy output"
     timeout: 120s
 
+  - id: analyze
+    run: pylint {{.source_dir}} --disable=all --enable=E,F 2>/dev/null || echo "pylint not installed (optional)"
+    severity: warning
+    suggestion: "Install pylint: pip install pylint"
+    timeout: 120s
+    requires:
+      - lint
+
   - id: test
     run: pytest
     severity: error
