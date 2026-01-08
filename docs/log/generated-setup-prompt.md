@@ -115,13 +115,6 @@ Based on the detected tools, here are the recommended checks:
 **Severity:** error
 **Suggestion on failure:** Run 'gofmt -w .' to format your Go code.
 
-### imports (format)
-**Description:** Check import organization with goimports
-**Rationale:** goimports ensures consistent import grouping and removes unused imports
-**Command:** `test -z "$(goimports -l .)"`
-**Severity:** error
-**Suggestion on failure:** Run 'goimports -w .' to fix import organization.
-
 ### vet (lint)
 **Description:** Run go vet to detect suspicious constructs
 **Rationale:** go vet finds bugs that the compiler doesn't catch, like incorrect printf format strings

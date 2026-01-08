@@ -7,7 +7,7 @@ import (
 func TestListReturnsAllTemplates(t *testing.T) {
 	templates := List()
 
-	// Should have all 8 templates
+	// Should have all 9 templates
 	expectedNames := []string{
 		"generic",
 		"go-minimal",
@@ -16,6 +16,7 @@ func TestListReturnsAllTemplates(t *testing.T) {
 		"node-typescript",
 		"python-pip",
 		"python-poetry",
+		"python-uv",
 		"rust-cargo",
 	}
 
@@ -42,6 +43,7 @@ func TestNamesReturnsAllNames(t *testing.T) {
 		"node-typescript",
 		"python-pip",
 		"python-poetry",
+		"python-uv",
 		"rust-cargo",
 	}
 
@@ -168,6 +170,21 @@ func TestRustCargoTemplateContent(t *testing.T) {
 	for _, check := range expectedChecks {
 		if !contains(tmpl.Content, "id: "+check) {
 			t.Errorf("rust-cargo template missing check %q", check)
+		}
+	}
+}
+
+func TestPythonUvTemplateContent(t *testing.T) {
+	tmpl, err := Get("python-uv")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should have Python uv-specific checks
+	expectedChecks := []string{"format", "lint", "typecheck", "test", "coverage"}
+	for _, check := range expectedChecks {
+		if !contains(tmpl.Content, "id: "+check) {
+			t.Errorf("python-uv template missing check %q", check)
 		}
 	}
 }
