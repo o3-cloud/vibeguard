@@ -53,11 +53,8 @@ Major architectural decisions are documented as Architecture Decision Records (A
 The `.claude/skills/` directory contains Claude Code skills that automate common workflows:
 
 - **`adr`** - Create Architecture Decision Records following the MADR template
-  - Use when: documenting significant architectural decisions, design choices, or major technical direction changes
-  - Location: `.claude/skills/adr/SKILL.md`
-
-- **`log`** - Log related skill
-  - Location: `.claude/skills/log/SKILL.md`
+- **`log`** - Create log entries with timestamps for discoveries, research, and significant events
+- **`talk`** - Speak summaries of any topic using the macOS `say` command
 
 ## Key Tools & Setup
 
@@ -94,3 +91,8 @@ To create new Architecture Decision Records:
 ### DO
 - Follow the spec and ADRs
 - Verify your work before committing changes
+
+
+## Specs
+
+@docs/specs/

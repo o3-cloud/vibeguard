@@ -8,7 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/vibeguard/vibeguard/internal/cli/inspector"
+	"github.com/vibeguard/vibeguard/internal/cli/assist"
 	"github.com/vibeguard/vibeguard/internal/cli/templates"
 	"github.com/vibeguard/vibeguard/internal/config"
 )
@@ -190,13 +190,20 @@ func runAssist(cmd *cobra.Command, args []string) error {
 
 	// Project detection is delegated to the AI agent.
 	// Generate a minimal setup prompt without project type detection.
-	prompt, err := inspector.GenerateSetupPromptWithoutDetection(root)
-	if err != nil {
-		return &ExitError{
-			Code:    3,
-			Message: fmt.Sprintf("failed to generate setup prompt: %v", err),
-		}
+	projectName := filepath.Base(root)
+	analysis := &assist.ProjectAnalysis{
+		Name:            projectName,
+		ProjectType:     "unknown",
+		Confidence:      0,
+		LanguageVersion: "",
+		DetectedTools:   []assist.ToolInfo{},
+		SourceDirs:      []string{},
+		TestDirs:        []string{},
+		EntryPoints:     []string{},
+		BuildOutputDir:  "",
 	}
+	composer := assist.NewComposer(analysis, []assist.CheckRecommendation{})
+	prompt := composer.Compose()
 
 	// Output the prompt
 	if initOutput != "" {

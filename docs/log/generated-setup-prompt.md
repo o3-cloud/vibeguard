@@ -8,26 +8,19 @@ generate a valid configuration.
 
 ---
 
-## Project Analysis
+## Your Project
 
 **Project Name:** github.com/vibeguard/vibeguard
-**Project Type:** go
-**Detection Confidence:** 100%
 
-### Main Tools Detected:
-- golangci-lint
-- gofmt
-- go vet
-- go test
-- goimports
+### Initial Analysis Instructions
 
-### Project Structure:
-- Source directories: internal
-- Test directories: cmd/vibeguard, internal/assert, internal/cli, internal/cli/assist, internal/cli/inspector, internal/cli/templates, internal/config, internal/executor, internal/grok, internal/orchestrator, internal/output
-- Entry points: cmd/vibeguard/main.go
+Before proceeding, analyze the project structure to understand:
 
-### Build System:
-- Build output: bin
+1. **Project Type & Language**: Examine the directory structure, file extensions, and package managers to identify the primary language and framework (Go, Node.js/TypeScript, Python, Rust, Java, Ruby, etc.)
+2. **Detected Tools**: Look for configuration files like `go.mod`, `package.json`, `pyproject.toml`, `Cargo.toml`, `pom.xml`, `Gemfile` to identify build systems, package managers, and development tools
+3. **Project Structure**: Identify source directories, test directories, entry points, and build output locations
+4. **Existing Quality Tools**: Check for configuration files for linters, formatters, and test frameworks (eslint, pytest, golangci-lint, cargo, etc.)
+
 
 
 ---
@@ -161,6 +154,46 @@ Based on the detected tools, here are the recommended checks:
 **Requires:** test
 
 
+
+---
+
+## Available Templates
+
+Rather than creating a custom configuration from scratch, you can use one of VibeGuard's predefined templates that are optimized for specific languages and frameworks.
+
+### Discover Available Templates
+
+Run this command to see all available templates:
+
+```bash
+vibeguard init --list-templates
+```
+
+This will display all templates with their descriptions and supported languages/frameworks.
+
+### Selecting a Template
+
+Based on your project analysis from the previous step:
+
+1. **Match your language/framework**: Find the template that best matches the project type you identified
+2. **Review the template**: Use `vibeguard init --list-templates` to see what each template covers
+3. **Try the template**: Run `vibeguard init --template <template-name>` to use a predefined template
+
+### When to Use Templates
+
+Use a predefined template when:
+- You want quick setup with reasonable defaults for your language/framework
+- Your project matches the template's language/framework
+- You're happy with the template's default checks
+
+### When to Use Custom Configuration
+
+Create a custom configuration when:
+- No template matches your exact setup
+- You have specific checks not in standard templates
+- You want fine-grained control over all settings
+
+You can also start with a template and modify it to suit your project's specific needs.
 
 ---
 
@@ -552,40 +585,55 @@ When generating a vibeguard.yaml configuration, DO NOT:
 
 ## Your Task
 
-Based on the project analysis above, generate a vibeguard.yaml configuration that:
+Based on your project analysis above, follow these steps to set up VibeGuard for the github.com/vibeguard/vibeguard project:
 
-1. Includes version: "1"
-2. Defines appropriate variables for this project
-3. Creates checks for the detected tools
-4. Follows the syntax rules described above
-5. Includes helpful suggestions for each check
-6. Uses appropriate timeouts for each check type
+### Step 1: Choose Your Approach
 
-Output the configuration in a YAML code block:
+You have two options:
 
-```yaml
-# vibeguard.yaml for github.com/vibeguard/vibeguard
-version: "1"
+**Option A: Use a Template (Recommended for most projects)**
+- Run: ```bashvibeguard init --list-templates```
+- Find a template that matches your project type
+- Run: ```bashvibeguard init --template <template-name>```
+- This creates a predefined vibeguard.yaml configuration optimized for your language/framework
 
-vars:
-  # ... your variables ...
+**Option B: Create a Custom Configuration**
+- If no template fits your needs, create a custom vibeguard.yaml
+- Based on your analysis, identify the quality checks and tools to include
+- Follow the Configuration Requirements section above
+- Ensure each check has a clear purpose and appropriate settings
 
-checks:
-  # ... your checks ...
+### Step 2: Validate Your Configuration
+
+Once you have a vibeguard.yaml file, validate it:
+
+```bash
+vibeguard validate
 ```
 
-After generating the configuration:
+This verifies the configuration has correct YAML syntax and adheres to the vibeguard schema.
 
-1. **Validate the YAML syntax and schema:**
-   ```bash
-   vibeguard validate
-   ```
-   This verifies the configuration file has correct YAML syntax and adheres to the vibeguard schema.
+### Step 3: Test Your Checks
 
-2. **Run the checks to verify they execute properly:**
-   ```bash
-   vibeguard check
-   ```
-   This runs all defined checks and ensures they execute successfully. Fix any failing checks before considering the task complete.
+Run the checks to ensure they execute properly:
 
-Only consider this task complete when both commands pass without errors.
+```bash
+vibeguard check
+```
+
+Review any failures and fix them:
+- Adjust commands if tools aren't found
+- Update assertions if they don't match your project's output
+- Add variable definitions if needed
+- Adjust timeouts if checks are timing out
+
+### Step 4: Commit the Configuration
+
+Once all checks pass, save the vibeguard.yaml file to your project repository. This ensures the configuration is version-controlled and used by all team members.
+
+### Success Criteria
+
+Your task is complete when:
+- ✅ vibeguard validate passes without errors
+- ✅ vibeguard check runs all checks successfully
+- ✅ vibeguard.yaml is committed to the repository

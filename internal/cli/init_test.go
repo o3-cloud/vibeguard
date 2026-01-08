@@ -139,15 +139,15 @@ func TestRunAssist_OutputToFile(t *testing.T) {
 	}
 
 	// Verify expected sections
-	// After integration with validator_guide.go, the prompt now includes
-	// comprehensive validation sections from the assist package
+	// After integration with assist.Composer, the prompt includes sections from the composer
+	// Note: When running without detection, there are no recommendations, so we expect
+	// "Identifying Quality Checks" instead of "Recommended Checks"
 	contentStr := string(content)
 	expectedSections := []string{
 		"# VibeGuard AI Agent Setup Guide",
-		"## Project Analysis",
-		"## Recommended Checks",
-		"## YAML Syntax Requirements",
-		"## Check Structure Requirements",
+		"## Your Project",
+		"## Identifying Quality Checks",
+		"## Available Templates",
 		"## Your Task",
 	}
 
