@@ -393,10 +393,28 @@ func TestRunInit_ForceOverwrite(t *testing.T) {
 }
 
 func TestListTemplates(t *testing.T) {
-	// Just verify listTemplates() doesn't error
+	// Capture stdout
+	var buf bytes.Buffer
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
 	err := listTemplates()
+
+	_ = w.Close()
+	os.Stdout = oldStdout
+	_, _ = buf.ReadFrom(r)
+
 	if err != nil {
 		t.Errorf("listTemplates failed: %v", err)
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, "Available templates:") {
+		t.Errorf("output missing 'Available templates:' header")
+	}
+	if !strings.Contains(output, "Usage:") {
+		t.Errorf("output missing usage information")
 	}
 }
 
@@ -415,6 +433,79 @@ func TestRunInit_ListTemplates(t *testing.T) {
 	err := runInit(initCmd, []string{})
 	if err != nil {
 		t.Errorf("runInit with --template list failed: %v", err)
+	}
+}
+
+func TestRunInit_ListTemplatesFlag(t *testing.T) {
+	oldListTemplates := initListTemplates
+	oldAssist := initAssist
+	defer func() {
+		initListTemplates = oldListTemplates
+		initAssist = oldAssist
+	}()
+
+	initListTemplates = true
+	initAssist = false
+
+	// This should call listTemplates() and return nil
+	err := runInit(initCmd, []string{})
+	if err != nil {
+		t.Errorf("runInit with --list-templates flag failed: %v", err)
+	}
+}
+
+func TestListTemplates_OutputFormat(t *testing.T) {
+	// Capture stdout
+	var buf bytes.Buffer
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err := listTemplates()
+
+	_ = w.Close()
+	os.Stdout = oldStdout
+	_, _ = buf.ReadFrom(r)
+
+	if err != nil {
+		t.Fatalf("listTemplates failed: %v", err)
+	}
+
+	output := buf.String()
+	lines := strings.Split(output, "\n")
+
+	// Verify output structure
+	if len(lines) < 3 {
+		t.Errorf("output too short, expected at least 3 lines")
+	}
+
+	// First line should be header
+	if !strings.Contains(lines[0], "Available templates:") {
+		t.Errorf("first line should contain 'Available templates:', got: %s", lines[0])
+	}
+
+	// Should have template entries with name and description
+	hasTemplateEntry := false
+	for _, line := range lines {
+		if strings.Contains(line, "go-") {
+			hasTemplateEntry = true
+			break
+		}
+	}
+	if !hasTemplateEntry {
+		t.Errorf("output should contain at least one template entry starting with 'go-'")
+	}
+
+	// Should have usage line
+	usageFound := false
+	for _, line := range lines {
+		if strings.Contains(line, "Usage:") {
+			usageFound = true
+			break
+		}
+	}
+	if !usageFound {
+		t.Errorf("output missing usage line")
 	}
 }
 
