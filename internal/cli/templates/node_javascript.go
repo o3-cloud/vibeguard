@@ -8,6 +8,7 @@ func init() {
 
 vars:
   source_dir: "src"
+  min_coverage: "70"
 
 checks:
   - id: format
@@ -29,6 +30,17 @@ checks:
     timeout: 300s
     requires:
       - lint
+
+  - id: coverage
+    run: npm test -- --coverage --passWithNoTests
+    grok:
+      - "Lines\\s+:\\s+%{NUMBER:coverage}%"
+    assert: "coverage >= {{.min_coverage}}"
+    severity: warning
+    suggestion: "Code coverage is below {{.min_coverage}}%. Increase test coverage."
+    timeout: 300s
+    requires:
+      - test
 
   - id: build
     run: npm run build

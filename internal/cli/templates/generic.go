@@ -9,6 +9,7 @@ func init() {
 # Customize these variables for your project
 vars:
   source_dir: "src"
+  min_coverage: "70"
 
 checks:
   # Add your formatting check
@@ -31,6 +32,18 @@ checks:
     severity: error
     suggestion: "Configure the test command in vibeguard.yaml"
     timeout: 300s
+
+  # Add your code coverage check
+  # - id: coverage
+  #   run: <your-coverage-tool> {{.source_dir}}
+  #   grok:
+  #     - <coverage-percentage-pattern>
+  #   assert: "coverage >= {{.min_coverage}}"
+  #   severity: warning
+  #   suggestion: "Code coverage is below {{.min_coverage}}%. Increase test coverage."
+  #   timeout: 300s
+  #   requires:
+  #     - test
 
   # Add your build check
   # - id: build

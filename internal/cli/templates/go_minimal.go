@@ -8,6 +8,7 @@ func init() {
 
 vars:
   go_packages: "./..."
+  min_coverage: "70"
 
 checks:
   - id: fmt
@@ -27,6 +28,17 @@ checks:
     severity: error
     suggestion: "Run 'go test ./...' to diagnose test failures"
     timeout: 300s
+
+  - id: coverage
+    run: go test {{.go_packages}} -coverprofile=cover.out && go tool cover -func=cover.out
+    grok:
+      - total:.*\(statements\)\s+%{NUMBER:coverage}%
+    assert: "coverage >= {{.min_coverage}}"
+    severity: warning
+    suggestion: "Code coverage is below {{.min_coverage}}%. Increase test coverage."
+    timeout: 300s
+    requires:
+      - test
 `,
 	})
 }

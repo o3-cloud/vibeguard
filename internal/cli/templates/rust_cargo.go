@@ -6,6 +6,9 @@ func init() {
 		Description: "Rust project using Cargo with clippy, formatting, and testing",
 		Content: `version: "1"
 
+vars:
+  min_coverage: "70"
+
 checks:
   - id: fmt
     run: cargo fmt -- --check
@@ -26,6 +29,17 @@ checks:
     timeout: 300s
     requires:
       - clippy
+
+  - id: coverage
+    run: cargo tarpaulin --out Stdout --timeout 300
+    grok:
+      - Coverage:\s+%{NUMBER:coverage}%
+    assert: "coverage >= {{.min_coverage}}"
+    severity: warning
+    suggestion: "Code coverage is below {{.min_coverage}}%. Increase test coverage."
+    timeout: 600s
+    requires:
+      - test
 
   - id: build
     run: cargo build --release
