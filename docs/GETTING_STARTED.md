@@ -75,6 +75,9 @@ ENTRYPOINT ["vibeguard"]
 The fastest way to get started is with guided initialization:
 
 ```bash
+# First, see what templates are available
+vibeguard init --list-templates
+
 # Interactive setup with AI assistance
 cd your-project
 vibeguard init --assist

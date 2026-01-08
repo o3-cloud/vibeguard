@@ -265,12 +265,38 @@ Output file path for configuration (mainly for `--assist` mode).
 vibeguard init --assist -o ./config/vibeguard.yaml
 ```
 
+#### `--list-templates` (boolean)
+
+List all available templates without creating a configuration file. Useful for discovering what templates are available before using the `--template` flag.
+
+**Examples:**
+```bash
+vibeguard init --list-templates
+```
+
+**Output format:**
+```
+Available templates:
+
+  go-standard          Comprehensive Go project setup
+  go-minimal           Minimal Go setup
+  node-typescript      TypeScript/Node.js
+  node-javascript      JavaScript/Node.js
+  python-poetry        Python with Poetry
+  python-pip           Python with pip
+  rust-cargo           Rust/Cargo
+  generic              Generic/minimal
+
+Usage: vibeguard init --template <name>
+```
+
 **Behavior:**
 1. If `--assist` specified: Analyzes project and guides creation via prompts
-2. If `-t` specified: Uses template for the language
-3. If neither: Creates default Go-based configuration
-4. If file exists: Prompts for confirmation (unless `-f` specified)
-5. Writes configuration to specified output file
+2. If `--list-templates` specified: Lists available templates and exits
+3. If `-t` specified: Uses template for the language
+4. If neither: Creates default Go-based configuration
+5. If file exists: Prompts for confirmation (unless `-f` specified)
+6. Writes configuration to specified output file
 
 **Example output:**
 ```yaml

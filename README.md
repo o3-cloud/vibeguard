@@ -129,6 +129,8 @@ vibeguard init              # Create vibeguard.yaml if it doesn't exist
 vibeguard init --force      # Overwrite existing configuration file
 vibeguard init --assist     # Generate AI setup guide for this project
 vibeguard init --assist -o guide.txt  # Save guide to a file
+vibeguard init --list-templates  # Show available templates
+vibeguard init -t go-standard  # Use specific template
 ```
 
 | Flag | Short | Description | Default |
@@ -136,6 +138,8 @@ vibeguard init --assist -o guide.txt  # Save guide to a file
 | `--force` | `-f` | Overwrite existing config file | false |
 | `--assist` | | Generate AI agent setup guide | false |
 | `--output` | `-o` | Output file for --assist (default: stdout) | stdout |
+| `--template` | `-t` | Use a predefined template for your project type | — |
+| `--list-templates` | | List all available templates | false |
 
 #### `vibeguard list`
 
