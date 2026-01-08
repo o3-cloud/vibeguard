@@ -7,8 +7,9 @@ import (
 func TestListReturnsAllTemplates(t *testing.T) {
 	templates := List()
 
-	// Should have all 9 templates
+	// Should have all 10 templates
 	expectedNames := []string{
+		"bun-typescript",
 		"generic",
 		"go-minimal",
 		"go-standard",
@@ -36,6 +37,7 @@ func TestNamesReturnsAllNames(t *testing.T) {
 	names := Names()
 
 	expectedNames := []string{
+		"bun-typescript",
 		"generic",
 		"go-minimal",
 		"go-standard",
@@ -155,6 +157,21 @@ func TestNodeTypescriptTemplateContent(t *testing.T) {
 	for _, check := range expectedChecks {
 		if !contains(tmpl.Content, "id: "+check) {
 			t.Errorf("node-typescript template missing check %q", check)
+		}
+	}
+}
+
+func TestBunTypescriptTemplateContent(t *testing.T) {
+	tmpl, err := Get("bun-typescript")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should have TypeScript-specific checks for Bun
+	expectedChecks := []string{"format", "lint", "typecheck", "test", "build"}
+	for _, check := range expectedChecks {
+		if !contains(tmpl.Content, "id: "+check) {
+			t.Errorf("bun-typescript template missing check %q", check)
 		}
 	}
 }
