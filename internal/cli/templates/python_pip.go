@@ -47,6 +47,14 @@ checks:
     timeout: 300s
     requires:
       - test
+
+  - id: build
+    run: pip install -e . && python -c "import {{.source_dir}}"
+    severity: error
+    suggestion: "Run 'pip install -e .' to diagnose installation errors"
+    timeout: 120s
+    requires:
+      - lint
 `,
 	})
 }

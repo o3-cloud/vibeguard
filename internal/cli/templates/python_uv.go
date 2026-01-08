@@ -47,6 +47,14 @@ checks:
     timeout: 300s
     requires:
       - test
+
+  - id: build
+    run: uv sync && uv run python -c "import {{.source_dir}}"
+    severity: error
+    suggestion: "Run 'uv sync' to diagnose installation errors"
+    timeout: 120s
+    requires:
+      - lint
 `,
 	})
 }

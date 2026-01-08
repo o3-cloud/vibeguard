@@ -39,6 +39,14 @@ checks:
     timeout: 300s
     requires:
       - test
+
+  - id: build
+    run: go build {{.go_packages}}
+    severity: error
+    suggestion: "Run 'go build ./...' to diagnose build errors"
+    timeout: 120s
+    requires:
+      - vet
 `,
 	})
 }

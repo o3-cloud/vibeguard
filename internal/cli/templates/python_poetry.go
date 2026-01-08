@@ -47,6 +47,14 @@ checks:
     timeout: 300s
     requires:
       - test
+
+  - id: build
+    run: poetry install && poetry run python -c "import {{.source_dir}}"
+    severity: error
+    suggestion: "Run 'poetry install' to diagnose installation errors"
+    timeout: 120s
+    requires:
+      - lint
 `,
 	})
 }
