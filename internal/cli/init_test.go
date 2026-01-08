@@ -89,20 +89,11 @@ func TestRunAssist_UndetectableProject(t *testing.T) {
 	initAssist = true
 	initOutput = ""
 
+	// Project detection is now delegated to the agent, so assist should succeed
+	// even on directories with no detectable project files
 	err = runAssist(initCmd, []string{tmpDir})
-	if err == nil {
-		t.Fatal("expected error for undetectable project")
-	}
-
-	exitErr, ok := err.(*ExitError)
-	if !ok {
-		t.Fatalf("expected ExitError, got %T", err)
-	}
-	if exitErr.Code != 2 {
-		t.Errorf("expected exit code 2, got %d", exitErr.Code)
-	}
-	if !strings.Contains(exitErr.Message, "unable to detect project type") {
-		t.Errorf("expected error message about project type detection, got: %s", exitErr.Message)
+	if err != nil {
+		t.Fatalf("runAssist should not error on undetectable projects: %v", err)
 	}
 }
 

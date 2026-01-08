@@ -188,60 +188,9 @@ func runAssist(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Run project detection
-	detector := inspector.NewDetector(root)
-	projectType, err := detector.DetectPrimary()
-	if err != nil {
-		return &ExitError{
-			Code:    3,
-			Message: fmt.Sprintf("failed to detect project type: %v", err),
-		}
-	}
-
-	// Check if project type is detectable
-	if projectType.Type == inspector.Unknown || projectType.Confidence < 0.3 {
-		return &ExitError{
-			Code:    2,
-			Message: "unable to detect project type (no go.mod, package.json, pyproject.toml, etc. found)",
-		}
-	}
-
-	// Scan for tools
-	scanner := inspector.NewToolScanner(root)
-	tools, err := scanner.ScanForProjectType(projectType.Type)
-	if err != nil {
-		return &ExitError{
-			Code:    3,
-			Message: fmt.Sprintf("failed to scan for tools: %v", err),
-		}
-	}
-
-	// Extract metadata
-	extractor := inspector.NewMetadataExtractor(root)
-	metadata, err := extractor.Extract(projectType.Type)
-	if err != nil {
-		return &ExitError{
-			Code:    3,
-			Message: fmt.Sprintf("failed to extract metadata: %v", err),
-		}
-	}
-
-	// Extract project structure
-	structure, err := extractor.ExtractStructure(projectType.Type)
-	if err != nil {
-		return &ExitError{
-			Code:    3,
-			Message: fmt.Sprintf("failed to extract project structure: %v", err),
-		}
-	}
-
-	// Generate recommendations
-	recommender := inspector.NewRecommender(projectType.Type, tools)
-	recommendations := recommender.Recommend()
-	recommendations = inspector.DeduplicateRecommendations(recommendations)
-
-	// Generate the prompt
-	prompt, err := inspector.GenerateSetupPrompt(projectType, tools, metadata, structure, recommendations)
+	// Project detection is delegated to the AI agent.
+	// Generate a minimal setup prompt without project type detection.
+	prompt, err := inspector.GenerateSetupPromptWithoutDetection(root)
 	if err != nil {
 		return &ExitError{
 			Code:    3,

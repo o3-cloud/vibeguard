@@ -3,6 +3,8 @@
 package inspector
 
 import (
+	"path/filepath"
+
 	"github.com/vibeguard/vibeguard/internal/cli/assist"
 )
 
@@ -74,4 +76,26 @@ func convertToAssistRecommendations(recs []CheckRecommendation) []assist.CheckRe
 		})
 	}
 	return result
+}
+
+// GenerateSetupPromptWithoutDetection generates a setup prompt without requiring project detection.
+// Project type detection is delegated to the AI agent.
+func GenerateSetupPromptWithoutDetection(root string) (string, error) {
+	// Create a minimal project analysis without detection
+	projectName := filepath.Base(root)
+	analysis := &assist.ProjectAnalysis{
+		Name:            projectName,
+		ProjectType:     "unknown",
+		Confidence:      0,
+		LanguageVersion: "",
+		DetectedTools:   []assist.ToolInfo{},
+		SourceDirs:      []string{},
+		TestDirs:        []string{},
+		EntryPoints:     []string{},
+		BuildOutputDir:  "",
+	}
+
+	// Use the Composer to generate the prompt with no recommendations
+	composer := assist.NewComposer(analysis, []assist.CheckRecommendation{})
+	return composer.Compose(), nil
 }
