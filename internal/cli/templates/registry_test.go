@@ -7,8 +7,9 @@ import (
 func TestListReturnsAllTemplates(t *testing.T) {
 	templates := List()
 
-	// Should have all 10 templates
+	// Should have all 11 templates
 	expectedNames := []string{
+		"bash",
 		"bun-typescript",
 		"generic",
 		"go-minimal",
@@ -37,6 +38,7 @@ func TestNamesReturnsAllNames(t *testing.T) {
 	names := Names()
 
 	expectedNames := []string{
+		"bash",
 		"bun-typescript",
 		"generic",
 		"go-minimal",
@@ -202,6 +204,21 @@ func TestPythonUvTemplateContent(t *testing.T) {
 	for _, check := range expectedChecks {
 		if !contains(tmpl.Content, "id: "+check) {
 			t.Errorf("python-uv template missing check %q", check)
+		}
+	}
+}
+
+func TestBashTemplateContent(t *testing.T) {
+	tmpl, err := Get("bash")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should have bash-specific checks
+	expectedChecks := []string{"format", "lint", "syntax", "analyze", "security", "test"}
+	for _, check := range expectedChecks {
+		if !contains(tmpl.Content, "id: "+check) {
+			t.Errorf("bash template missing check %q", check)
 		}
 	}
 }
