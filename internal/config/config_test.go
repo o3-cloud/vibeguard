@@ -1654,3 +1654,608 @@ checks:
 		})
 	}
 }
+
+func TestValidatePrompts_Valid(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "vibeguard.yaml")
+
+	content := `version: "1"
+prompts:
+  - id: init
+    description: "Init prompt"
+    content: "You are helpful"
+    tags: [setup, guidance]
+  - id: review
+    description: "Code review"
+    content: "Review code"
+    tags: [review, quality]
+checks:
+  - id: test
+    run: true
+`
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	if len(cfg.Prompts) != 2 {
+		t.Fatalf("expected 2 prompts, got: %d", len(cfg.Prompts))
+	}
+}
+
+func TestValidatePrompts_NoPrompts(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "vibeguard.yaml")
+
+	content := `version: "1"
+checks:
+  - id: test
+    run: true
+`
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	if len(cfg.Prompts) != 0 {
+		t.Fatalf("expected 0 prompts, got: %d", len(cfg.Prompts))
+	}
+}
+
+func TestValidatePrompts_MissingID(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "vibeguard.yaml")
+
+	content := `version: "1"
+prompts:
+  - description: "Missing ID"
+    content: "Test"
+checks:
+  - id: test
+    run: true
+`
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Load(configPath)
+	if err == nil {
+		t.Fatal("expected error for missing prompt id")
+	}
+
+	if !strings.Contains(err.Error(), "has no id") {
+		t.Errorf("expected 'has no id' error, got: %v", err)
+	}
+
+	var configErr *ConfigError
+	if !errors.As(err, &configErr) {
+		t.Fatalf("expected ConfigError, got: %T", err)
+	}
+}
+
+func TestValidatePrompts_InvalidIDFormat(t *testing.T) {
+	tests := []struct {
+		name      string
+		promptID  string
+		shouldErr bool
+	}{
+		{"valid with letters", "init", false},
+		{"valid with underscore", "_init", false},
+		{"valid with hyphen", "init-guide", false},
+		{"valid with numbers", "init123", false},
+		{"invalid starting with number", "1init", true},
+		{"invalid with space", "init guide", true},
+		{"invalid with dot", "init.guide", true},
+		{"invalid with special chars", "init@guide", true},
+		{"empty string", "", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			configPath := filepath.Join(dir, "vibeguard.yaml")
+
+			content := `version: "1"
+prompts:
+  - id: ` + tt.promptID + `
+    content: "Test"
+checks:
+  - id: test
+    run: true
+`
+			if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+				t.Fatal(err)
+			}
+
+			_, err := Load(configPath)
+			if tt.shouldErr && err == nil {
+				t.Fatalf("expected error for invalid id: %q", tt.promptID)
+			}
+			if !tt.shouldErr && err != nil {
+				t.Fatalf("expected no error, got: %v", err)
+			}
+		})
+	}
+}
+
+func TestValidatePrompts_DuplicateID(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "vibeguard.yaml")
+
+	content := `version: "1"
+prompts:
+  - id: init
+    content: "First"
+  - id: init
+    content: "Duplicate"
+checks:
+  - id: test
+    run: true
+`
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Load(configPath)
+	if err == nil {
+		t.Fatal("expected error for duplicate prompt id")
+	}
+
+	if !strings.Contains(err.Error(), "duplicate prompt id") {
+		t.Errorf("expected 'duplicate prompt id' error, got: %v", err)
+	}
+
+	var configErr *ConfigError
+	if !errors.As(err, &configErr) {
+		t.Fatalf("expected ConfigError, got: %T", err)
+	}
+}
+
+func TestValidatePrompts_InvalidTagFormat(t *testing.T) {
+	tests := []struct {
+		name      string
+		tag       string
+		shouldErr bool
+	}{
+		{"valid lowercase", "setup", false},
+		{"valid with hyphen", "code-review", false},
+		{"valid with numbers", "v1beta", false},
+		{"invalid uppercase", "Setup", true},
+		{"invalid underscore", "code_review", true},
+		{"invalid with space", "code review", true},
+		{"invalid starting with hyphen", "-setup", true},
+		{"invalid starting with number", "1setup", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			configPath := filepath.Join(dir, "vibeguard.yaml")
+
+			content := `version: "1"
+prompts:
+  - id: init
+    content: "Test"
+    tags: [` + tt.tag + `]
+checks:
+  - id: test
+    run: true
+`
+			if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+				t.Fatal(err)
+			}
+
+			_, err := Load(configPath)
+			if tt.shouldErr && err == nil {
+				t.Fatalf("expected error for invalid tag: %q", tt.tag)
+			}
+			if !tt.shouldErr && err != nil {
+				t.Fatalf("expected no error, got: %v", err)
+			}
+		})
+	}
+}
+
+func TestValidatePrompts_MultipleInvalidTags(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "vibeguard.yaml")
+
+	// First tag is valid, second is invalid (should catch first invalid)
+	content := `version: "1"
+prompts:
+  - id: init
+    content: "Test"
+    tags: [setup, Code_Review]
+checks:
+  - id: test
+    run: true
+`
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Load(configPath)
+	if err == nil {
+		t.Fatal("expected error for invalid tag format")
+	}
+
+	if !strings.Contains(err.Error(), "invalid tag") {
+		t.Errorf("expected 'invalid tag' error, got: %v", err)
+	}
+}
+
+func TestValidatePrompts_PromptsAndChecks(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "vibeguard.yaml")
+
+	content := `version: "1"
+prompts:
+  - id: init
+    description: "Init prompt"
+    content: "Initialize config"
+    tags: [setup, guidance]
+  - id: review
+    description: "Code review"
+    content: "Review code"
+    tags: [review]
+checks:
+  - id: lint
+    run: golangci-lint run
+    severity: error
+  - id: test
+    run: go test ./...
+    requires: [lint]
+`
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	if len(cfg.Prompts) != 2 {
+		t.Errorf("expected 2 prompts, got: %d", len(cfg.Prompts))
+	}
+
+	if len(cfg.Checks) != 2 {
+		t.Errorf("expected 2 checks, got: %d", len(cfg.Checks))
+	}
+}
+
+func TestValidatePrompts_EmptyPromptContent(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "vibeguard.yaml")
+
+	content := `version: "1"
+prompts:
+  - id: empty
+    content: ""
+checks:
+  - id: test
+    run: true
+`
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	if len(cfg.Prompts) != 1 {
+		t.Errorf("expected 1 prompt, got: %d", len(cfg.Prompts))
+	}
+
+	if cfg.Prompts[0].Content != "" {
+		t.Errorf("expected empty content, got: %q", cfg.Prompts[0].Content)
+	}
+}
+
+// TestLoad_EventHandler_ValidPromptIDs tests event handler with valid prompt ID references
+func TestLoad_EventHandler_ValidPromptIDs(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "vibeguard.yaml")
+
+	content := `
+version: "1"
+prompts:
+  - id: code-review
+    content: "Review code"
+  - id: security-audit
+    content: "Audit security"
+checks:
+  - id: test
+    run: "true"
+    severity: error
+    on:
+      success: [code-review]
+      failure: [security-audit]
+`
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	if cfg.Checks[0].On.Success.IDs[0] != "code-review" {
+		t.Errorf("expected success event with code-review, got: %v", cfg.Checks[0].On.Success.IDs)
+	}
+	if cfg.Checks[0].On.Failure.IDs[0] != "security-audit" {
+		t.Errorf("expected failure event with security-audit, got: %v", cfg.Checks[0].On.Failure.IDs)
+	}
+}
+
+// TestLoad_EventHandler_InvalidPromptID tests event handler with non-existent prompt ID reference
+func TestLoad_EventHandler_InvalidPromptID(t *testing.T) {
+	tests := []struct {
+		name      string
+		eventType string
+		content   string
+	}{
+		{
+			name:      "success_event_invalid_id",
+			eventType: "success",
+			content: `
+version: "1"
+prompts:
+  - id: code-review
+    content: "Review code"
+checks:
+  - id: test
+    run: "true"
+    severity: error
+    on:
+      success: [non-existent]
+`,
+		},
+		{
+			name:      "failure_event_invalid_id",
+			eventType: "failure",
+			content: `
+version: "1"
+prompts:
+  - id: code-review
+    content: "Review code"
+checks:
+  - id: test
+    run: "true"
+    severity: error
+    on:
+      failure: [unknown-prompt]
+`,
+		},
+		{
+			name:      "timeout_event_invalid_id",
+			eventType: "timeout",
+			content: `
+version: "1"
+prompts:
+  - id: code-review
+    content: "Review code"
+checks:
+  - id: test
+    run: "true"
+    severity: error
+    on:
+      timeout: [missing-prompt]
+`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			configPath := filepath.Join(dir, "vibeguard.yaml")
+			if err := os.WriteFile(configPath, []byte(tt.content), 0644); err != nil {
+				t.Fatal(err)
+			}
+
+			_, err := Load(configPath)
+			if err == nil {
+				t.Fatalf("expected error for invalid %s prompt ID", tt.eventType)
+			}
+
+			if !IsConfigError(err) {
+				t.Errorf("expected ConfigError, got: %T", err)
+			}
+
+			if !strings.Contains(err.Error(), "unknown prompt") {
+				t.Errorf("expected 'unknown prompt' in error message, got: %s", err.Error())
+			}
+		})
+	}
+}
+
+// TestLoad_EventHandler_InlineContent tests event handlers with inline content
+func TestLoad_EventHandler_InlineContent(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "vibeguard.yaml")
+
+	content := `
+version: "1"
+checks:
+  - id: test
+    run: "true"
+    severity: error
+    on:
+      success: "Great job!"
+      failure: "Something went wrong"
+      timeout: "Check timed out"
+`
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	check := cfg.Checks[0]
+	if !check.On.Success.IsInline || check.On.Success.Content != "Great job!" {
+		t.Errorf("expected inline success content, got: %+v", check.On.Success)
+	}
+	if !check.On.Failure.IsInline || check.On.Failure.Content != "Something went wrong" {
+		t.Errorf("expected inline failure content, got: %+v", check.On.Failure)
+	}
+	if !check.On.Timeout.IsInline || check.On.Timeout.Content != "Check timed out" {
+		t.Errorf("expected inline timeout content, got: %+v", check.On.Timeout)
+	}
+}
+
+// TestLoad_EventHandler_MixedInlineAndIDs tests mixing inline content and prompt IDs
+func TestLoad_EventHandler_MixedInlineAndIDs(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "vibeguard.yaml")
+
+	content := `
+version: "1"
+prompts:
+  - id: code-review
+    content: "Review code"
+checks:
+  - id: test
+    run: "true"
+    severity: error
+    on:
+      success: [code-review]
+      failure: "Fix the issue"
+      timeout: "Check timed out"
+`
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	check := cfg.Checks[0]
+	if check.On.Success.IsInline || len(check.On.Success.IDs) != 1 || check.On.Success.IDs[0] != "code-review" {
+		t.Errorf("expected success with ID, got: %+v", check.On.Success)
+	}
+	if !check.On.Failure.IsInline || check.On.Failure.Content != "Fix the issue" {
+		t.Errorf("expected failure inline, got: %+v", check.On.Failure)
+	}
+	if !check.On.Timeout.IsInline || check.On.Timeout.Content != "Check timed out" {
+		t.Errorf("expected timeout inline, got: %+v", check.On.Timeout)
+	}
+}
+
+// TestLoad_EventHandler_MultiplePromptIDs tests event handler with multiple prompt ID references
+func TestLoad_EventHandler_MultiplePromptIDs(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "vibeguard.yaml")
+
+	content := `
+version: "1"
+prompts:
+  - id: init
+    content: "Initialize"
+  - id: code-review
+    content: "Review code"
+  - id: security-audit
+    content: "Audit security"
+checks:
+  - id: test
+    run: "true"
+    severity: error
+    on:
+      failure: [init, code-review, security-audit]
+`
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	check := cfg.Checks[0]
+	if len(check.On.Failure.IDs) != 3 {
+		t.Errorf("expected 3 prompt IDs, got: %d", len(check.On.Failure.IDs))
+	}
+	expected := []string{"init", "code-review", "security-audit"}
+	for i, id := range check.On.Failure.IDs {
+		if id != expected[i] {
+			t.Errorf("expected %s at index %d, got: %s", expected[i], i, id)
+		}
+	}
+}
+
+// TestLoad_EventHandler_EmptyOn tests check with empty event handler
+func TestLoad_EventHandler_EmptyOn(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "vibeguard.yaml")
+
+	content := `
+version: "1"
+checks:
+  - id: test
+    run: "true"
+    severity: error
+    on:
+`
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	check := cfg.Checks[0]
+	if len(check.On.Success.IDs) != 0 || check.On.Success.Content != "" {
+		t.Errorf("expected empty success, got: %+v", check.On.Success)
+	}
+	if len(check.On.Failure.IDs) != 0 || check.On.Failure.Content != "" {
+		t.Errorf("expected empty failure, got: %+v", check.On.Failure)
+	}
+	if len(check.On.Timeout.IDs) != 0 || check.On.Timeout.Content != "" {
+		t.Errorf("expected empty timeout, got: %+v", check.On.Timeout)
+	}
+}
+
+// TestLoad_EventHandler_NoOn tests check without event handler
+func TestLoad_EventHandler_NoOn(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "vibeguard.yaml")
+
+	content := `
+version: "1"
+checks:
+  - id: test
+    run: "true"
+    severity: error
+`
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	check := cfg.Checks[0]
+	if len(check.On.Success.IDs) != 0 || check.On.Success.Content != "" {
+		t.Errorf("expected empty success, got: %+v", check.On.Success)
+	}
+}

@@ -326,6 +326,240 @@ func TestFormatter_QuietMode_FailFastTriggered(t *testing.T) {
 	}
 }
 
+func TestFormatter_QuietMode_WithTriggeredPrompts(t *testing.T) {
+	var buf bytes.Buffer
+	f := New(&buf, false) // quiet mode
+
+	result := &orchestrator.RunResult{
+		Violations: []*orchestrator.Violation{
+			{
+				CheckID:    "vet",
+				Severity:   config.SeverityError,
+				Command:    "go vet ./...",
+				Suggestion: "Fix vet errors",
+				TriggeredPrompts: []*orchestrator.TriggeredPrompt{
+					{
+						Event:   "failure",
+						Source:  "init",
+						Content: "You are an expert in helping users set up VibeGuard.\nGuide them through setup.",
+					},
+					{
+						Event:   "failure",
+						Source:  "inline",
+						Content: "Also remember to run gofmt before committing",
+					},
+				},
+			},
+		},
+		ExitCode: 1,
+	}
+
+	f.FormatResult(result)
+
+	output := buf.String()
+
+	// Should show violation header
+	if !bytes.Contains(buf.Bytes(), []byte("FAIL  vet (error)")) {
+		t.Errorf("expected violation header, got: %q", output)
+	}
+
+	// Should show triggered prompts section
+	if !bytes.Contains(buf.Bytes(), []byte("Triggered Prompts (failure):")) {
+		t.Errorf("expected triggered prompts section, got: %q", output)
+	}
+
+	// Should show first prompt with ID
+	if !bytes.Contains(buf.Bytes(), []byte("[1] init:")) {
+		t.Errorf("expected first prompt header, got: %q", output)
+	}
+
+	// Should show prompt content
+	if !bytes.Contains(buf.Bytes(), []byte("You are an expert in helping users set up VibeGuard.")) {
+		t.Errorf("expected prompt content, got: %q", output)
+	}
+
+	// Should show second prompt with inline label
+	if !bytes.Contains(buf.Bytes(), []byte("[2] (inline):")) {
+		t.Errorf("expected inline prompt header, got: %q", output)
+	}
+
+	// Should show inline content
+	if !bytes.Contains(buf.Bytes(), []byte("Also remember to run gofmt before committing")) {
+		t.Errorf("expected inline content, got: %q", output)
+	}
+
+	// Should show advisory line
+	if !bytes.Contains(buf.Bytes(), []byte("Advisory: blocks commit")) {
+		t.Errorf("expected advisory line, got: %q", output)
+	}
+}
+
+func TestFormatter_TriggeredPrompts_SinglePrompt(t *testing.T) {
+	var buf bytes.Buffer
+	f := New(&buf, false) // quiet mode
+
+	result := &orchestrator.RunResult{
+		Violations: []*orchestrator.Violation{
+			{
+				CheckID:  "test",
+				Severity: config.SeverityError,
+				Command:  "go test ./...",
+				TriggeredPrompts: []*orchestrator.TriggeredPrompt{
+					{
+						Event:   "failure",
+						Source:  "test-generator",
+						Content: "Generate comprehensive unit tests for the failing code.",
+					},
+				},
+			},
+		},
+		ExitCode: 1,
+	}
+
+	f.FormatResult(result)
+
+	output := buf.String()
+
+	// Should show the single prompt
+	if !bytes.Contains(buf.Bytes(), []byte("[1] test-generator:")) {
+		t.Errorf("expected prompt header, got: %q", output)
+	}
+}
+
+func TestFormatter_TriggeredPrompts_MultilineContent(t *testing.T) {
+	var buf bytes.Buffer
+	f := New(&buf, false) // quiet mode
+
+	result := &orchestrator.RunResult{
+		Violations: []*orchestrator.Violation{
+			{
+				CheckID:  "security",
+				Severity: config.SeverityError,
+				Command:  "gosec ./...",
+				TriggeredPrompts: []*orchestrator.TriggeredPrompt{
+					{
+						Event:   "failure",
+						Source:  "security-audit",
+						Content: "Line 1: Check for vulnerabilities\nLine 2: Including injection attacks\nLine 3: And access control issues",
+					},
+				},
+			},
+		},
+		ExitCode: 1,
+	}
+
+	f.FormatResult(result)
+
+	output := buf.String()
+
+	// Should show multi-line content with proper indentation
+	if !bytes.Contains(buf.Bytes(), []byte("      Line 1: Check for vulnerabilities")) {
+		t.Errorf("expected first line indented, got: %q", output)
+	}
+	if !bytes.Contains(buf.Bytes(), []byte("      Line 2: Including injection attacks")) {
+		t.Errorf("expected second line indented, got: %q", output)
+	}
+	if !bytes.Contains(buf.Bytes(), []byte("      Line 3: And access control issues")) {
+		t.Errorf("expected third line indented, got: %q", output)
+	}
+}
+
+func TestFormatter_TriggeredPrompts_SuccessEvent(t *testing.T) {
+	var buf bytes.Buffer
+	f := New(&buf, false) // quiet mode
+
+	result := &orchestrator.RunResult{
+		Violations: []*orchestrator.Violation{
+			{
+				CheckID:  "fmt",
+				Severity: config.SeverityError,
+				Command:  "go fmt ./...",
+				TriggeredPrompts: []*orchestrator.TriggeredPrompt{
+					{
+						Event:   "success",
+						Source:  "code-review",
+						Content: "Great! Code formatting passed. Consider code review suggestions.",
+					},
+				},
+			},
+		},
+		ExitCode: 1,
+	}
+
+	f.FormatResult(result)
+
+	output := buf.String()
+
+	// Should show success event label
+	if !bytes.Contains(buf.Bytes(), []byte("Triggered Prompts (success):")) {
+		t.Errorf("expected success event label, got: %q", output)
+	}
+}
+
+func TestFormatter_TriggeredPrompts_TimeoutEvent(t *testing.T) {
+	var buf bytes.Buffer
+	f := New(&buf, false) // quiet mode
+
+	result := &orchestrator.RunResult{
+		Violations: []*orchestrator.Violation{
+			{
+				CheckID:  "integration-test",
+				Severity: config.SeverityError,
+				Command:  "go test ./tests/integration/...",
+				Timedout: true,
+				TriggeredPrompts: []*orchestrator.TriggeredPrompt{
+					{
+						Event:   "timeout",
+						Source:  "inline",
+						Content: "Integration tests timed out. Check for hanging goroutines.",
+					},
+				},
+			},
+		},
+		ExitCode: 1,
+	}
+
+	f.FormatResult(result)
+
+	output := buf.String()
+
+	// Should show timeout event label
+	if !bytes.Contains(buf.Bytes(), []byte("Triggered Prompts (timeout):")) {
+		t.Errorf("expected timeout event label, got: %q", output)
+	}
+}
+
+func TestFormatter_TriggeredPrompts_NoPrompts(t *testing.T) {
+	var buf bytes.Buffer
+	f := New(&buf, false) // quiet mode
+
+	result := &orchestrator.RunResult{
+		Violations: []*orchestrator.Violation{
+			{
+				CheckID:          "vet",
+				Severity:         config.SeverityError,
+				Command:          "go vet ./...",
+				TriggeredPrompts: []*orchestrator.TriggeredPrompt{}, // Empty
+			},
+		},
+		ExitCode: 1,
+	}
+
+	f.FormatResult(result)
+
+	output := buf.String()
+
+	// Should NOT show triggered prompts section when empty
+	if bytes.Contains(buf.Bytes(), []byte("Triggered Prompts")) {
+		t.Errorf("expected no triggered prompts section, got: %q", output)
+	}
+
+	// Should still show basic violation info
+	if !bytes.Contains(buf.Bytes(), []byte("FAIL  vet (error)")) {
+		t.Errorf("expected violation header, got: %q", output)
+	}
+}
+
 func TestTruncateCommand(t *testing.T) {
 	tests := []struct {
 		name     string

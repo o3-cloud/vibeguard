@@ -17,21 +17,30 @@ type JSONOutput struct {
 
 // JSONCheck represents a check result in JSON format.
 type JSONCheck struct {
-	ID         string   `json:"id"`
-	Tags       []string `json:"tags,omitempty"`
-	Status     string   `json:"status"`
-	DurationMS int64    `json:"duration_ms"`
+	ID               string                 `json:"id"`
+	Tags             []string               `json:"tags,omitempty"`
+	Status           string                 `json:"status"`
+	DurationMS       int64                  `json:"duration_ms"`
+	TriggeredPrompts []*JSONTriggeredPrompt `json:"triggered_prompts,omitempty"`
+}
+
+// JSONTriggeredPrompt represents a triggered prompt in JSON format.
+type JSONTriggeredPrompt struct {
+	Event   string `json:"event"`
+	Source  string `json:"source"`
+	Content string `json:"content"`
 }
 
 // JSONViolation represents a violation in JSON format.
 type JSONViolation struct {
-	ID         string            `json:"id"`
-	Severity   string            `json:"severity"`
-	Command    string            `json:"command"`
-	Suggestion string            `json:"suggestion,omitempty"`
-	Fix        string            `json:"fix,omitempty"`
-	Extracted  map[string]string `json:"extracted,omitempty"`
-	LogFile    string            `json:"log_file,omitempty"`
+	ID               string                 `json:"id"`
+	Severity         string                 `json:"severity"`
+	Command          string                 `json:"command"`
+	Suggestion       string                 `json:"suggestion,omitempty"`
+	Fix              string                 `json:"fix,omitempty"`
+	Extracted        map[string]string      `json:"extracted,omitempty"`
+	LogFile          string                 `json:"log_file,omitempty"`
+	TriggeredPrompts []*JSONTriggeredPrompt `json:"triggered_prompts,omitempty"`
 }
 
 // FormatJSON outputs the result in JSON format.
@@ -50,23 +59,46 @@ func FormatJSON(out io.Writer, result *orchestrator.RunResult) error {
 		} else if !r.Passed {
 			status = "failed"
 		}
+
+		// Convert triggered prompts to JSON format
+		jsonPrompts := make([]*JSONTriggeredPrompt, 0, len(r.TriggeredPrompts))
+		for _, p := range r.TriggeredPrompts {
+			jsonPrompts = append(jsonPrompts, &JSONTriggeredPrompt{
+				Event:   p.Event,
+				Source:  p.Source,
+				Content: p.Content,
+			})
+		}
+
 		output.Checks = append(output.Checks, JSONCheck{
-			ID:         r.Check.ID,
-			Tags:       r.Check.Tags,
-			Status:     status,
-			DurationMS: r.Execution.Duration.Milliseconds(),
+			ID:               r.Check.ID,
+			Tags:             r.Check.Tags,
+			Status:           status,
+			DurationMS:       r.Execution.Duration.Milliseconds(),
+			TriggeredPrompts: jsonPrompts,
 		})
 	}
 
 	for _, v := range result.Violations {
+		// Convert triggered prompts to JSON format
+		jsonPrompts := make([]*JSONTriggeredPrompt, 0, len(v.TriggeredPrompts))
+		for _, p := range v.TriggeredPrompts {
+			jsonPrompts = append(jsonPrompts, &JSONTriggeredPrompt{
+				Event:   p.Event,
+				Source:  p.Source,
+				Content: p.Content,
+			})
+		}
+
 		output.Violations = append(output.Violations, JSONViolation{
-			ID:         v.CheckID,
-			Severity:   string(v.Severity),
-			Command:    v.Command,
-			Suggestion: v.Suggestion,
-			Fix:        v.Fix,
-			Extracted:  v.Extracted,
-			LogFile:    v.LogFile,
+			ID:               v.CheckID,
+			Severity:         string(v.Severity),
+			Command:          v.Command,
+			Suggestion:       v.Suggestion,
+			Fix:              v.Fix,
+			Extracted:        v.Extracted,
+			LogFile:          v.LogFile,
+			TriggeredPrompts: jsonPrompts,
 		})
 	}
 

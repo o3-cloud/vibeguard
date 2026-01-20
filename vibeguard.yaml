@@ -3,12 +3,29 @@ version: "1"
 vars:
   go_packages: "./..."
 
+prompts:
+
+  - id: fix
+    description: Guidance for fixing issues identified by VibeGuard
+    content: |
+      You are an expert in helping users resolve issues found by VibeGuard.
+
+      Guide them through:
+      1. Understanding the specific issue and its impact
+      2. Identifying the root cause of the problem
+      3. Providing step-by-step solutions to fix the issue
+      4. Verifying the fix and ensuring no regressions
+      5. Implment the fix in the codebase
+
+    tags: [fix, resolution, guidance]
+
 checks:
   - id: vet
     run: go vet {{.go_packages}}
     severity: error
-    suggestion: "go vet found issues in the codebase"
-    fix: "go vet ./..."
+    on:
+      failure:
+        - fix
     timeout: 5s
     tags: [lint, fast, pre-commit, build]
 
@@ -23,32 +40,36 @@ checks:
   - id: actionlint
     run: actionlint
     severity: error
-    suggestion: "GitHub Actions workflows have validation errors (deprecated actions, syntax errors, or unsafe shell interpolation)"
-    fix: "Review actionlint output and fix the reported issues"
+    on:
+      failure:
+        - fix
     timeout: 10s
     tags: [lint, ci]
 
   - id: lint
     run: golangci-lint run {{.go_packages}}
     severity: error
-    suggestion: "golangci-lint found lint issues"
-    fix: "Fix the linter issues"
+    on:
+      failure:
+        - fix
     timeout: 5s
     tags: [lint, fast, pre-commit]
 
   - id: staticcheck
     run: staticcheck {{.go_packages}}
     severity: error
-    suggestion: "staticcheck found issues in the codebase"
-    fix: "Fix the staticcheck issues"
+    on:
+      failure:
+        - fix
     timeout: 5s
     tags: [lint, security, fast, pre-commit]
 
   - id: test
     run: go test -race {{.go_packages}}
     severity: warning
-    suggestion: "Some tests are failing"
-    fix: "Fix the failing tests"
+    on:
+      failure:
+        - fix
     timeout: 20s
     tags: [test, pre-commit]
 
@@ -57,16 +78,18 @@ checks:
     grok:
       - total:.*\(statements\)\s+%{NUMBER:coverage}%
     assert: "coverage >= 89"
-    suggestion: "Coverage is {{.coverage}}%, need 89%"
-    fix: "Add more test cases to improve coverage"
+    on:
+      failure:
+        - fix
     timeout: 20s
     tags: [test, ci]
 
   - id: build
     run: go build -o vibeguard ./cmd/vibeguard
     severity: error
-    suggestion: "Build failed with compilation errors"
-    fix: "Fix the build errors"
+    on:
+      failure:
+        - fix
     timeout: 5s
     tags: [build, fast, pre-commit]
     requires:
@@ -75,15 +98,17 @@ checks:
   - id: gosec
     run: gosec {{.go_packages}}
     severity: error
-    suggestion: "gosec found security vulnerabilities"
-    fix: "Fix the security issues"
+    on:
+      failure:
+        - fix
     timeout: 30s
     tags: [security, slow, ci]
 
   - id: docker
     run: checkov -d . --framework dockerfile
     severity: error
-    suggestion: checkov found issues in the Dockerfile
-    fix: "Fix the issues reported by checkov"
+    on:
+      failure:
+        - fix
     timeout: 30s
     tags: [security, ci, slow]

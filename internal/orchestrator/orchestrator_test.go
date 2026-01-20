@@ -2433,3 +2433,394 @@ func TestTagFilter_NoMatches(t *testing.T) {
 		t.Errorf("expected exit code 0 for no matches (no error), got %d", result.ExitCode)
 	}
 }
+
+// TriggeredPrompts Tests
+
+func TestRun_EventHandler_FailureEvent_InlineContent(t *testing.T) {
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{
+				ID:         "fail-check",
+				Run:        "exit 1",
+				Severity:   config.SeverityError,
+				Suggestion: "Fix the issue",
+				On: config.EventHandler{
+					Failure: config.EventValue{
+						IsInline: true,
+						Content:  "Please check the logs and fix the error",
+					},
+				},
+			},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 1, false, false, "", 1)
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(result.Violations) != 1 {
+		t.Fatalf("expected 1 violation, got %d", len(result.Violations))
+	}
+
+	violation := result.Violations[0]
+	if len(violation.TriggeredPrompts) != 1 {
+		t.Fatalf("expected 1 triggered prompt, got %d", len(violation.TriggeredPrompts))
+	}
+
+	prompt := violation.TriggeredPrompts[0]
+	if prompt.Event != "failure" {
+		t.Errorf("expected event 'failure', got %q", prompt.Event)
+	}
+	if prompt.Source != "inline" {
+		t.Errorf("expected source 'inline', got %q", prompt.Source)
+	}
+	if prompt.Content != "Please check the logs and fix the error" {
+		t.Errorf("expected prompt content, got %q", prompt.Content)
+	}
+}
+
+func TestRun_EventHandler_FailureEvent_PromptIDReference(t *testing.T) {
+	cfg := &config.Config{
+		Version: "1",
+		Prompts: []config.Prompt{
+			{
+				ID:      "code-review",
+				Content: "Please review the code quality and security",
+			},
+		},
+		Checks: []config.Check{
+			{
+				ID:         "fail-check",
+				Run:        "exit 1",
+				Severity:   config.SeverityError,
+				Suggestion: "Fix the issue",
+				On: config.EventHandler{
+					Failure: config.EventValue{
+						IDs:      []string{"code-review"},
+						IsInline: false,
+					},
+				},
+			},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 1, false, false, "", 1)
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(result.Violations) != 1 {
+		t.Fatalf("expected 1 violation, got %d", len(result.Violations))
+	}
+
+	violation := result.Violations[0]
+	if len(violation.TriggeredPrompts) != 1 {
+		t.Fatalf("expected 1 triggered prompt, got %d", len(violation.TriggeredPrompts))
+	}
+
+	prompt := violation.TriggeredPrompts[0]
+	if prompt.Event != "failure" {
+		t.Errorf("expected event 'failure', got %q", prompt.Event)
+	}
+	if prompt.Source != "code-review" {
+		t.Errorf("expected source 'code-review', got %q", prompt.Source)
+	}
+	if prompt.Content != "Please review the code quality and security" {
+		t.Errorf("expected prompt content")
+	}
+}
+
+func TestRun_EventHandler_TimeoutEvent(t *testing.T) {
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{
+				ID:       "timeout-check",
+				Run:      "sleep 10",
+				Severity: config.SeverityError,
+				Timeout:  config.Duration(time.Millisecond * 100),
+				On: config.EventHandler{
+					Timeout: config.EventValue{
+						IsInline: true,
+						Content:  "Check timed out. Consider optimizing the command.",
+					},
+				},
+			},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 1, false, false, "", 1)
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(result.Violations) != 1 {
+		t.Fatalf("expected 1 violation, got %d", len(result.Violations))
+	}
+
+	violation := result.Violations[0]
+	if !violation.Timedout {
+		t.Error("expected check to be marked as timedout")
+	}
+
+	if len(violation.TriggeredPrompts) != 1 {
+		t.Fatalf("expected 1 triggered prompt, got %d", len(violation.TriggeredPrompts))
+	}
+
+	prompt := violation.TriggeredPrompts[0]
+	if prompt.Event != "timeout" {
+		t.Errorf("expected event 'timeout', got %q", prompt.Event)
+	}
+	if prompt.Source != "inline" {
+		t.Errorf("expected source 'inline', got %q", prompt.Source)
+	}
+}
+
+func TestRun_EventHandler_SuccessEvent(t *testing.T) {
+	cfg := &config.Config{
+		Version: "1",
+		Prompts: []config.Prompt{
+			{
+				ID:      "test-generator",
+				Content: "Generate more comprehensive tests for edge cases",
+			},
+		},
+		Checks: []config.Check{
+			{
+				ID:       "pass-check",
+				Run:      "exit 0",
+				Severity: config.SeverityError,
+				On: config.EventHandler{
+					Success: config.EventValue{
+						IDs:      []string{"test-generator"},
+						IsInline: false,
+					},
+				},
+			},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 1, false, false, "", 1)
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(result.Results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result.Results))
+	}
+
+	checkResult := result.Results[0]
+	if !checkResult.Passed {
+		t.Error("expected check to pass")
+	}
+
+	if len(checkResult.TriggeredPrompts) != 1 {
+		t.Fatalf("expected 1 triggered prompt in CheckResult, got %d", len(checkResult.TriggeredPrompts))
+	}
+
+	prompt := checkResult.TriggeredPrompts[0]
+	if prompt.Event != "success" {
+		t.Errorf("expected event 'success', got %q", prompt.Event)
+	}
+	if prompt.Source != "test-generator" {
+		t.Errorf("expected source 'test-generator', got %q", prompt.Source)
+	}
+}
+
+func TestRun_EventHandler_TimeoutPrecedence_OverFailure(t *testing.T) {
+	// When a check times out, only timeout event should trigger (not failure)
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{
+				ID:       "timeout-check",
+				Run:      "sleep 10",
+				Severity: config.SeverityError,
+				Timeout:  config.Duration(time.Millisecond * 100),
+				On: config.EventHandler{
+					Failure: config.EventValue{
+						IsInline: true,
+						Content:  "This should not trigger",
+					},
+					Timeout: config.EventValue{
+						IsInline: true,
+						Content:  "Check timed out",
+					},
+				},
+			},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 1, false, false, "", 1)
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(result.Violations) != 1 {
+		t.Fatalf("expected 1 violation, got %d", len(result.Violations))
+	}
+
+	violation := result.Violations[0]
+	if len(violation.TriggeredPrompts) != 1 {
+		t.Fatalf("expected 1 triggered prompt, got %d", len(violation.TriggeredPrompts))
+	}
+
+	prompt := violation.TriggeredPrompts[0]
+	if prompt.Event != "timeout" {
+		t.Errorf("expected event 'timeout', got %q", prompt.Event)
+	}
+	if prompt.Content != "Check timed out" {
+		t.Errorf("expected timeout content, got %q", prompt.Content)
+	}
+}
+
+func TestRun_EventHandler_MultiplePrompts(t *testing.T) {
+	cfg := &config.Config{
+		Version: "1",
+		Prompts: []config.Prompt{
+			{
+				ID:      "security-audit",
+				Content: "Check for security vulnerabilities",
+			},
+			{
+				ID:      "code-review",
+				Content: "Review code quality",
+			},
+		},
+		Checks: []config.Check{
+			{
+				ID:         "fail-check",
+				Run:        "exit 1",
+				Severity:   config.SeverityError,
+				Suggestion: "Fix the issue",
+				On: config.EventHandler{
+					Failure: config.EventValue{
+						IDs:      []string{"security-audit", "code-review"},
+						IsInline: false,
+					},
+				},
+			},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 1, false, false, "", 1)
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	violation := result.Violations[0]
+	if len(violation.TriggeredPrompts) != 2 {
+		t.Fatalf("expected 2 triggered prompts, got %d", len(violation.TriggeredPrompts))
+	}
+
+	// Check that both prompts are present
+	sources := map[string]bool{}
+	for _, prompt := range violation.TriggeredPrompts {
+		sources[prompt.Source] = true
+	}
+
+	if !sources["security-audit"] {
+		t.Error("expected security-audit prompt")
+	}
+	if !sources["code-review"] {
+		t.Error("expected code-review prompt")
+	}
+}
+
+func TestRun_EventHandler_NoEventHandler(t *testing.T) {
+	// Check should fail but have no triggered prompts
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{
+				ID:         "fail-check",
+				Run:        "exit 1",
+				Severity:   config.SeverityError,
+				Suggestion: "Fix the issue",
+				// No On event handler defined
+			},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 1, false, false, "", 1)
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(result.Violations) != 1 {
+		t.Fatalf("expected 1 violation, got %d", len(result.Violations))
+	}
+
+	violation := result.Violations[0]
+	if len(violation.TriggeredPrompts) != 0 {
+		t.Errorf("expected 0 triggered prompts, got %d", len(violation.TriggeredPrompts))
+	}
+}
+
+func TestRun_EventHandler_MixedInlineAndPromptIDs(t *testing.T) {
+	cfg := &config.Config{
+		Version: "1",
+		Prompts: []config.Prompt{
+			{
+				ID:      "security-audit",
+				Content: "Check for security vulnerabilities",
+			},
+		},
+		Checks: []config.Check{
+			{
+				ID:         "fail-check",
+				Run:        "exit 1",
+				Severity:   config.SeverityError,
+				Suggestion: "Fix the issue",
+				On: config.EventHandler{
+					Failure: config.EventValue{
+						// When we have IDs, inline content is not used
+						IDs:      []string{"security-audit"},
+						IsInline: false,
+					},
+				},
+			},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 1, false, false, "", 1)
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	violation := result.Violations[0]
+	if len(violation.TriggeredPrompts) != 1 {
+		t.Fatalf("expected 1 triggered prompt, got %d", len(violation.TriggeredPrompts))
+	}
+
+	prompt := violation.TriggeredPrompts[0]
+	if prompt.Source != "security-audit" {
+		t.Errorf("expected source 'security-audit', got %q", prompt.Source)
+	}
+}

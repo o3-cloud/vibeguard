@@ -422,3 +422,289 @@ func TestIntegration_ComplexWorkflow(t *testing.T) {
 		t.Errorf("expected extracted passed=42, got %q", testResult.Extracted["passed"])
 	}
 }
+
+// TestIntegration_EventHandlers_FailureEvent tests failure event triggering with real check execution
+func TestIntegration_EventHandlers_FailureEvent(t *testing.T) {
+	cfg := &config.Config{
+		Version: "1",
+		Prompts: []config.Prompt{
+			{
+				ID:      "debug-guide",
+				Content: "How to debug the test failure",
+			},
+		},
+		Checks: []config.Check{
+			{
+				ID:         "failing-test",
+				Run:        "exit 1",
+				Severity:   config.SeverityError,
+				Suggestion: "Fix the failing test",
+				On: config.EventHandler{
+					Failure: config.EventValue{
+						IDs:      []string{"debug-guide"},
+						IsInline: false,
+					},
+				},
+			},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 1, false, false, "", 1)
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(result.Violations) != 1 {
+		t.Fatalf("expected 1 violation, got %d", len(result.Violations))
+	}
+
+	violation := result.Violations[0]
+	if len(violation.TriggeredPrompts) != 1 {
+		t.Fatalf("expected 1 triggered prompt, got %d", len(violation.TriggeredPrompts))
+	}
+
+	prompt := violation.TriggeredPrompts[0]
+	if prompt.Event != "failure" {
+		t.Errorf("expected event 'failure', got %q", prompt.Event)
+	}
+	if prompt.Source != "debug-guide" {
+		t.Errorf("expected source 'debug-guide', got %q", prompt.Source)
+	}
+	if prompt.Content != "How to debug the test failure" {
+		t.Errorf("expected content from prompt, got %q", prompt.Content)
+	}
+}
+
+// TestIntegration_EventHandlers_SuccessEvent tests success event triggering
+func TestIntegration_EventHandlers_SuccessEvent(t *testing.T) {
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{
+				ID:       "passing-test",
+				Run:      "exit 0",
+				Severity: config.SeverityError,
+				On: config.EventHandler{
+					Success: config.EventValue{
+						Content:  "Great! All checks passed.",
+						IsInline: true,
+					},
+				},
+			},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 1, false, false, "", 1)
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(result.Results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(result.Results))
+	}
+
+	checkResult := result.Results[0]
+	if len(checkResult.TriggeredPrompts) != 1 {
+		t.Fatalf("expected 1 triggered prompt, got %d", len(checkResult.TriggeredPrompts))
+	}
+
+	prompt := checkResult.TriggeredPrompts[0]
+	if prompt.Event != "success" {
+		t.Errorf("expected event 'success', got %q", prompt.Event)
+	}
+	if prompt.Source != "inline" {
+		t.Errorf("expected source 'inline', got %q", prompt.Source)
+	}
+	if prompt.Content != "Great! All checks passed." {
+		t.Errorf("expected inline content, got %q", prompt.Content)
+	}
+}
+
+// TestIntegration_EventHandlers_TimeoutEvent tests timeout event precedence
+func TestIntegration_EventHandlers_TimeoutEvent(t *testing.T) {
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{
+				ID:       "timeout-test",
+				Run:      "sleep 5",
+				Timeout:  config.Duration(100 * time.Millisecond),
+				Severity: config.SeverityError,
+				On: config.EventHandler{
+					Failure: config.EventValue{
+						Content:  "The check failed",
+						IsInline: true,
+					},
+					Timeout: config.EventValue{
+						Content:  "The check timed out",
+						IsInline: true,
+					},
+				},
+			},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 1, false, false, "", 1)
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(result.Violations) != 1 {
+		t.Fatalf("expected 1 violation, got %d", len(result.Violations))
+	}
+
+	violation := result.Violations[0]
+	if len(violation.TriggeredPrompts) != 1 {
+		t.Fatalf("expected 1 triggered prompt (timeout), got %d", len(violation.TriggeredPrompts))
+	}
+
+	prompt := violation.TriggeredPrompts[0]
+	// Timeout should take precedence over failure
+	if prompt.Event != "timeout" {
+		t.Errorf("expected event 'timeout', got %q", prompt.Event)
+	}
+	if prompt.Content != "The check timed out" {
+		t.Errorf("expected timeout prompt content, got %q", prompt.Content)
+	}
+}
+
+// TestIntegration_EventHandlers_MultiplePrompts tests multiple prompts in one event
+func TestIntegration_EventHandlers_MultiplePrompts(t *testing.T) {
+	cfg := &config.Config{
+		Version: "1",
+		Prompts: []config.Prompt{
+			{
+				ID:      "debug",
+				Content: "Debug instructions",
+			},
+			{
+				ID:      "guide",
+				Content: "Implementation guide",
+			},
+		},
+		Checks: []config.Check{
+			{
+				ID:       "failing-check",
+				Run:      "exit 1",
+				Severity: config.SeverityError,
+				On: config.EventHandler{
+					Failure: config.EventValue{
+						IDs:      []string{"debug", "guide"},
+						IsInline: false,
+					},
+				},
+			},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 1, false, false, "", 1)
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(result.Violations) != 1 {
+		t.Fatalf("expected 1 violation, got %d", len(result.Violations))
+	}
+
+	violation := result.Violations[0]
+	if len(violation.TriggeredPrompts) != 2 {
+		t.Fatalf("expected 2 triggered prompts, got %d", len(violation.TriggeredPrompts))
+	}
+
+	// Check first prompt
+	if violation.TriggeredPrompts[0].Source != "debug" {
+		t.Errorf("expected first prompt source 'debug', got %q", violation.TriggeredPrompts[0].Source)
+	}
+	if violation.TriggeredPrompts[0].Content != "Debug instructions" {
+		t.Errorf("expected first prompt content 'Debug instructions', got %q", violation.TriggeredPrompts[0].Content)
+	}
+
+	// Check second prompt
+	if violation.TriggeredPrompts[1].Source != "guide" {
+		t.Errorf("expected second prompt source 'guide', got %q", violation.TriggeredPrompts[1].Source)
+	}
+	if violation.TriggeredPrompts[1].Content != "Implementation guide" {
+		t.Errorf("expected second prompt content 'Implementation guide', got %q", violation.TriggeredPrompts[1].Content)
+	}
+}
+
+// TestIntegration_EventHandlers_WithDependencies tests event handlers with check dependencies
+func TestIntegration_EventHandlers_WithDependencies(t *testing.T) {
+	cfg := &config.Config{
+		Version: "1",
+		Checks: []config.Check{
+			{
+				ID:       "setup",
+				Run:      "exit 0",
+				Severity: config.SeverityError,
+				On: config.EventHandler{
+					Success: config.EventValue{
+						Content:  "Setup completed",
+						IsInline: true,
+					},
+				},
+			},
+			{
+				ID:       "test",
+				Run:      "exit 1",
+				Severity: config.SeverityError,
+				Requires: []string{"setup"},
+				On: config.EventHandler{
+					Failure: config.EventValue{
+						Content:  "Tests failed",
+						IsInline: true,
+					},
+				},
+			},
+		},
+	}
+
+	exec := executor.New("")
+	orch := New(cfg, exec, 1, false, false, "", 1)
+
+	result, err := orch.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(result.Results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(result.Results))
+	}
+
+	// First check should pass and have success event
+	if !result.Results[0].Passed {
+		t.Error("expected setup check to pass")
+	}
+	if len(result.Results[0].TriggeredPrompts) != 1 {
+		t.Errorf("expected 1 triggered prompt for setup, got %d", len(result.Results[0].TriggeredPrompts))
+	}
+	if result.Results[0].TriggeredPrompts[0].Event != "success" {
+		t.Errorf("expected success event for setup")
+	}
+
+	// Second check should fail and have failure event
+	if result.Results[1].Passed {
+		t.Error("expected test check to fail")
+	}
+	if len(result.Violations) != 1 {
+		t.Fatalf("expected 1 violation, got %d", len(result.Violations))
+	}
+	if len(result.Violations[0].TriggeredPrompts) != 1 {
+		t.Errorf("expected 1 triggered prompt for test, got %d", len(result.Violations[0].TriggeredPrompts))
+	}
+	if result.Violations[0].TriggeredPrompts[0].Event != "failure" {
+		t.Errorf("expected failure event for test")
+	}
+}

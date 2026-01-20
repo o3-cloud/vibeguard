@@ -21,10 +21,11 @@ import (
 
 // CheckResult represents the result of evaluating a single check.
 type CheckResult struct {
-	Check     *config.Check
-	Execution *executor.Result
-	Passed    bool
-	Extracted map[string]string // Values extracted via grok patterns
+	Check            *config.Check
+	Execution        *executor.Result
+	Passed           bool
+	Extracted        map[string]string // Values extracted via grok patterns
+	TriggeredPrompts []*TriggeredPrompt
 }
 
 // RunResult contains the complete results of running all checks.
@@ -36,16 +37,24 @@ type RunResult struct {
 	FailFastTriggered bool // True if execution was stopped early due to fail-fast
 }
 
+// TriggeredPrompt represents a prompt that was triggered by a check result.
+type TriggeredPrompt struct {
+	Event   string // "success", "failure", or "timeout"
+	Source  string // "init", "code-review", etc. (prompt ID) or "inline" for inline content
+	Content string // The actual prompt content
+}
+
 // Violation represents a check failure.
 type Violation struct {
-	CheckID    string
-	Severity   config.Severity
-	Command    string
-	Suggestion string
-	Fix        string
-	Extracted  map[string]string
-	Timedout   bool
-	LogFile    string // Path to log file containing check output
+	CheckID          string
+	Severity         config.Severity
+	Command          string
+	Suggestion       string
+	Fix              string
+	Extracted        map[string]string
+	Timedout         bool
+	LogFile          string // Path to log file containing check output
+	TriggeredPrompts []*TriggeredPrompt
 }
 
 // TagFilter specifies which checks to include/exclude based on tags.
@@ -467,10 +476,11 @@ func (o *Orchestrator) Run(ctx context.Context) (*RunResult, error) {
 				}
 
 				result := &CheckResult{
-					Check:     check,
-					Execution: execResult,
-					Passed:    passed,
-					Extracted: extracted,
+					Check:            check,
+					Execution:        execResult,
+					Passed:           passed,
+					Extracted:        extracted,
+					TriggeredPrompts: o.evaluateTriggeredPrompts(check, passed, execResult.Timedout),
 				}
 
 				mu.Lock()
@@ -483,14 +493,15 @@ func (o *Orchestrator) Run(ctx context.Context) (*RunResult, error) {
 						suggestion = "Check timed out. Consider increasing the timeout value or optimizing the command."
 					}
 					violation := &Violation{
-						CheckID:    check.ID,
-						Severity:   check.Severity,
-						Command:    check.Run,
-						Suggestion: suggestion,
-						Fix:        check.Fix,
-						Extracted:  result.Extracted,
-						Timedout:   execResult.Timedout,
-						LogFile:    filepath.Join(o.logDir, check.ID+".log"),
+						CheckID:          check.ID,
+						Severity:         check.Severity,
+						Command:          check.Run,
+						Suggestion:       suggestion,
+						Fix:              check.Fix,
+						Extracted:        result.Extracted,
+						Timedout:         execResult.Timedout,
+						LogFile:          filepath.Join(o.logDir, check.ID+".log"),
+						TriggeredPrompts: o.evaluateTriggeredPrompts(check, passed, execResult.Timedout),
 					}
 					levelViolations = append(levelViolations, violation)
 
@@ -695,10 +706,11 @@ func (o *Orchestrator) RunCheck(ctx context.Context, checkID string) (*RunResult
 	}
 
 	result := &CheckResult{
-		Check:     check,
-		Execution: execResult,
-		Passed:    passed,
-		Extracted: extracted,
+		Check:            check,
+		Execution:        execResult,
+		Passed:           passed,
+		Extracted:        extracted,
+		TriggeredPrompts: o.evaluateTriggeredPrompts(check, passed, execResult.Timedout),
 	}
 
 	var violations []*Violation
@@ -709,14 +721,15 @@ func (o *Orchestrator) RunCheck(ctx context.Context, checkID string) (*RunResult
 			suggestion = "Check timed out. Consider increasing the timeout value or optimizing the command."
 		}
 		violation := &Violation{
-			CheckID:    check.ID,
-			Severity:   check.Severity,
-			Command:    check.Run,
-			Suggestion: suggestion,
-			Fix:        check.Fix,
-			Extracted:  result.Extracted,
-			Timedout:   execResult.Timedout,
-			LogFile:    filepath.Join(o.logDir, check.ID+".log"),
+			CheckID:          check.ID,
+			Severity:         check.Severity,
+			Command:          check.Run,
+			Suggestion:       suggestion,
+			Fix:              check.Fix,
+			Extracted:        result.Extracted,
+			Timedout:         execResult.Timedout,
+			LogFile:          filepath.Join(o.logDir, check.ID+".log"),
+			TriggeredPrompts: result.TriggeredPrompts,
 		}
 		violations = append(violations, violation)
 		if execResult.Timedout || check.Severity == config.SeverityError {
@@ -730,6 +743,65 @@ func (o *Orchestrator) RunCheck(ctx context.Context, checkID string) (*RunResult
 		Duration:   time.Since(start),
 		ExitCode:   exitCode,
 	}, nil
+}
+
+// evaluateTriggeredPrompts evaluates which event is triggered and returns the prompts to display.
+// Event precedence: timeout > failure > success
+func (o *Orchestrator) evaluateTriggeredPrompts(check *config.Check, passed bool, timedout bool) []*TriggeredPrompt {
+	var eventName string
+	var eventValue config.EventValue
+
+	// Determine which event was triggered (precedence: timeout > failure > success)
+	if timedout {
+		eventName = "timeout"
+		eventValue = check.On.Timeout
+	} else if !passed {
+		eventName = "failure"
+		eventValue = check.On.Failure
+	} else {
+		eventName = "success"
+		eventValue = check.On.Success
+	}
+
+	// Return early if no event handler is defined
+	if eventName == "success" && !eventValue.IsInline && len(eventValue.IDs) == 0 {
+		return nil
+	}
+	if eventName == "failure" && !eventValue.IsInline && len(eventValue.IDs) == 0 {
+		return nil
+	}
+	if eventName == "timeout" && !eventValue.IsInline && len(eventValue.IDs) == 0 {
+		return nil
+	}
+
+	// Handle inline content
+	if eventValue.IsInline && eventValue.Content != "" {
+		return []*TriggeredPrompt{
+			{
+				Event:   eventName,
+				Source:  "inline",
+				Content: eventValue.Content,
+			},
+		}
+	}
+
+	// Handle prompt ID references
+	var triggered []*TriggeredPrompt
+	for _, promptID := range eventValue.IDs {
+		// Find the prompt in config
+		for _, prompt := range o.config.Prompts {
+			if prompt.ID == promptID {
+				triggered = append(triggered, &TriggeredPrompt{
+					Event:   eventName,
+					Source:  promptID,
+					Content: prompt.Content,
+				})
+				break
+			}
+		}
+	}
+
+	return triggered
 }
 
 // writeCheckLog writes check output to <logDir>/<check-id>.log

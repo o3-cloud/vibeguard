@@ -168,6 +168,11 @@ func (c *Config) Validate() error {
 		return &ConfigError{Message: "no checks defined"}
 	}
 
+	// Validate prompts if present
+	if err := c.validatePrompts(); err != nil {
+		return err
+	}
+
 	checkIDs := make(map[string]bool)
 	for i, check := range c.Checks {
 		if check.ID == "" {
@@ -242,11 +247,110 @@ func (c *Config) Validate() error {
 				}
 			}
 		}
+
+		// Validate event handlers
+		if err := c.validateEventHandlers(check, i); err != nil {
+			return err
+		}
 	}
 
 	// Validate no cyclic dependencies
 	if err := c.validateNoCycles(); err != nil {
 		return err
+	}
+
+	return nil
+}
+
+// validatePrompts checks the prompts for errors.
+func (c *Config) validatePrompts() error {
+	if len(c.Prompts) == 0 {
+		return nil
+	}
+
+	promptIDs := make(map[string]bool)
+	for i, prompt := range c.Prompts {
+		if prompt.ID == "" {
+			return &ConfigError{
+				Message: fmt.Sprintf("prompt at index %d has no id", i),
+				LineNum: c.FindPromptNodeLine("", i),
+			}
+		}
+
+		// Validate ID format
+		if !validCheckID.MatchString(prompt.ID) {
+			return &ConfigError{
+				Message: fmt.Sprintf("prompt %q has invalid id format: must start with a letter or underscore, followed by alphanumeric characters, underscores, or hyphens", prompt.ID),
+				LineNum: c.FindPromptNodeLine(prompt.ID, i),
+			}
+		}
+
+		// Check for duplicate IDs
+		if promptIDs[prompt.ID] {
+			return &ConfigError{
+				Message: fmt.Sprintf("duplicate prompt id: %s", prompt.ID),
+				LineNum: c.FindPromptNodeLine(prompt.ID, i),
+			}
+		}
+		promptIDs[prompt.ID] = true
+
+		// Validate tags
+		for _, tag := range prompt.Tags {
+			if !validTag.MatchString(tag) {
+				return &ConfigError{
+					Message: fmt.Sprintf("prompt %q has invalid tag %q: must be lowercase alphanumeric with hyphens", prompt.ID, tag),
+					LineNum: c.FindPromptNodeLine(prompt.ID, i),
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+// validateEventHandlers checks event handler configuration for a check.
+// Validates that prompt ID references exist and event names are valid.
+func (c *Config) validateEventHandlers(check Check, checkIndex int) error {
+	// Validate success event handler
+	if !check.On.Success.IsInline && len(check.On.Success.IDs) > 0 {
+		if err := c.validateEventPromptIDs(check.ID, checkIndex, "success", check.On.Success.IDs); err != nil {
+			return err
+		}
+	}
+
+	// Validate failure event handler
+	if !check.On.Failure.IsInline && len(check.On.Failure.IDs) > 0 {
+		if err := c.validateEventPromptIDs(check.ID, checkIndex, "failure", check.On.Failure.IDs); err != nil {
+			return err
+		}
+	}
+
+	// Validate timeout event handler
+	if !check.On.Timeout.IsInline && len(check.On.Timeout.IDs) > 0 {
+		if err := c.validateEventPromptIDs(check.ID, checkIndex, "timeout", check.On.Timeout.IDs); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// validateEventPromptIDs checks that prompt ID references in an event exist in the config.
+func (c *Config) validateEventPromptIDs(checkID string, checkIndex int, eventName string, promptIDs []string) error {
+	// Build a map of valid prompt IDs
+	validPromptIDs := make(map[string]bool)
+	for _, prompt := range c.Prompts {
+		validPromptIDs[prompt.ID] = true
+	}
+
+	// Check each referenced prompt ID
+	for _, promptID := range promptIDs {
+		if !validPromptIDs[promptID] {
+			return &ConfigError{
+				Message: fmt.Sprintf("check %q references unknown prompt %q in event %q", checkID, promptID, eventName),
+				LineNum: c.FindCheckNodeLine(checkID, checkIndex),
+			}
+		}
 	}
 
 	return nil
@@ -331,6 +435,47 @@ func formatCycle(path []string) string {
 		result += " -> " + path[i]
 	}
 	return result
+}
+
+// FindPromptNodeLine returns the line number of a prompt in the YAML, or 0 if not found.
+func (c *Config) FindPromptNodeLine(promptID string, promptIndex int) int {
+	root, ok := c.yamlRoot.(*yaml.Node)
+	if !ok || root == nil {
+		return 0
+	}
+
+	// When unmarshaling into a Node, the root is a DocumentNode (Kind 1)
+	// and its first Content element is the actual mapping
+	var mapping *yaml.Node
+	if root.Kind == yaml.DocumentNode && len(root.Content) > 0 {
+		mapping = root.Content[0]
+	} else if root.Kind == yaml.MappingNode {
+		mapping = root
+	} else {
+		return 0
+	}
+
+	if mapping.Kind != yaml.MappingNode {
+		return 0
+	}
+
+	for i := 0; i < len(mapping.Content); i += 2 {
+		if i+1 >= len(mapping.Content) {
+			break
+		}
+		keyNode := mapping.Content[i]
+		valueNode := mapping.Content[i+1]
+
+		if keyNode.Value == "prompts" && valueNode.Kind == yaml.SequenceNode {
+			// Found the prompts sequence, get the prompt at the given index
+			if promptIndex >= 0 && promptIndex < len(valueNode.Content) {
+				return valueNode.Content[promptIndex].Line
+			}
+			break
+		}
+	}
+
+	return 0
 }
 
 // FindCheckNodeLine returns the line number of a check in the YAML, or 0 if not found.

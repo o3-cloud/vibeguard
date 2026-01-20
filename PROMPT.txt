@@ -1,7 +1,10 @@
-get the current available work "what should I work on"
-Pick item 1 
-work on the task until complete 
-create issues for any issues that you find
-run `vibeguard check` and fix any failures raised
-log your findings
-commit your changes
+# Workflow
+
+1. Get the current available work "what should I work on"
+2. Pick item 1
+3. Work on the task until complete
+4. Create issues for any issues that you find
+5. Run `vibeguard check` and fix any failures raised
+6. Log your findings
+7. Commit your changes
+8. Talk about what changes you made

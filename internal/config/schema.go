@@ -7,24 +7,34 @@ import "time"
 type Config struct {
 	Version string            `yaml:"version"`
 	Vars    map[string]string `yaml:"vars"`
+	Prompts []Prompt          `yaml:"prompts,omitempty"`
 	Checks  []Check           `yaml:"checks"`
 	// yamlRoot stores the parsed YAML node tree for line number lookups (not exported)
 	yamlRoot interface{} `yaml:"-"`
 }
 
+// Prompt represents a stored prompt that can be used for guidance.
+type Prompt struct {
+	ID          string   `yaml:"id"`
+	Description string   `yaml:"description,omitempty"`
+	Content     string   `yaml:"content"`
+	Tags        []string `yaml:"tags,omitempty"`
+}
+
 // Check represents a single check to execute.
 type Check struct {
-	ID         string   `yaml:"id"`
-	Run        string   `yaml:"run"`
-	Grok       GrokSpec `yaml:"grok"`
-	File       string   `yaml:"file"`
-	Assert     string   `yaml:"assert"`
-	Severity   Severity `yaml:"severity"`
-	Suggestion string   `yaml:"suggestion"`
-	Fix        string   `yaml:"fix,omitempty"`
-	Requires   []string `yaml:"requires"`
-	Tags       []string `yaml:"tags,omitempty"`
-	Timeout    Duration `yaml:"timeout"`
+	ID         string       `yaml:"id"`
+	Run        string       `yaml:"run"`
+	Grok       GrokSpec     `yaml:"grok"`
+	File       string       `yaml:"file"`
+	Assert     string       `yaml:"assert"`
+	Severity   Severity     `yaml:"severity"`
+	Suggestion string       `yaml:"suggestion"`
+	Fix        string       `yaml:"fix,omitempty"`
+	Requires   []string     `yaml:"requires"`
+	Tags       []string     `yaml:"tags,omitempty"`
+	Timeout    Duration     `yaml:"timeout"`
+	On         EventHandler `yaml:"on,omitempty"`
 }
 
 // Severity represents the severity level of a check failure.

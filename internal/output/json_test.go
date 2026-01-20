@@ -317,3 +317,213 @@ func TestFormatJSON_WithTags(t *testing.T) {
 		t.Errorf("expected check[2] to have empty tags, got %v", output.Checks[2].Tags)
 	}
 }
+
+func TestFormatJSON_WithTriggeredPrompts(t *testing.T) {
+	var buf bytes.Buffer
+
+	result := &orchestrator.RunResult{
+		Results: []*orchestrator.CheckResult{
+			{
+				Check:     &config.Check{ID: "vet", Severity: config.SeverityError},
+				Execution: &executor.Result{Duration: 500 * time.Millisecond},
+				Passed:    false,
+			},
+		},
+		Violations: []*orchestrator.Violation{
+			{
+				CheckID:    "vet",
+				Severity:   config.SeverityError,
+				Command:    "go vet ./...",
+				Suggestion: "Fix vet errors",
+				TriggeredPrompts: []*orchestrator.TriggeredPrompt{
+					{
+						Event:   "failure",
+						Source:  "init",
+						Content: "You are an expert in helping users set up VibeGuard.",
+					},
+					{
+						Event:   "failure",
+						Source:  "inline",
+						Content: "Also remember to run gofmt before committing",
+					},
+				},
+			},
+		},
+		ExitCode: 1,
+	}
+
+	err := FormatJSON(&buf, result)
+	if err != nil {
+		t.Fatalf("FormatJSON failed: %v", err)
+	}
+
+	var output JSONOutput
+	if err := json.Unmarshal(buf.Bytes(), &output); err != nil {
+		t.Fatalf("failed to unmarshal output: %v", err)
+	}
+
+	if len(output.Violations) != 1 {
+		t.Fatalf("expected 1 violation, got %d", len(output.Violations))
+	}
+
+	v := output.Violations[0]
+	if len(v.TriggeredPrompts) != 2 {
+		t.Errorf("expected 2 triggered prompts, got %d", len(v.TriggeredPrompts))
+	}
+
+	// Check first prompt
+	if v.TriggeredPrompts[0].Event != "failure" {
+		t.Errorf("expected event 'failure', got %q", v.TriggeredPrompts[0].Event)
+	}
+	if v.TriggeredPrompts[0].Source != "init" {
+		t.Errorf("expected source 'init', got %q", v.TriggeredPrompts[0].Source)
+	}
+	if v.TriggeredPrompts[0].Content != "You are an expert in helping users set up VibeGuard." {
+		t.Errorf("unexpected content: %q", v.TriggeredPrompts[0].Content)
+	}
+
+	// Check second prompt
+	if v.TriggeredPrompts[1].Event != "failure" {
+		t.Errorf("expected event 'failure', got %q", v.TriggeredPrompts[1].Event)
+	}
+	if v.TriggeredPrompts[1].Source != "inline" {
+		t.Errorf("expected source 'inline', got %q", v.TriggeredPrompts[1].Source)
+	}
+	if v.TriggeredPrompts[1].Content != "Also remember to run gofmt before committing" {
+		t.Errorf("unexpected content: %q", v.TriggeredPrompts[1].Content)
+	}
+}
+
+func TestFormatJSON_WithTriggeredPrompts_SinglePrompt(t *testing.T) {
+	var buf bytes.Buffer
+
+	result := &orchestrator.RunResult{
+		Results: []*orchestrator.CheckResult{
+			{
+				Check:     &config.Check{ID: "test", Severity: config.SeverityError},
+				Execution: &executor.Result{Duration: 1000 * time.Millisecond},
+				Passed:    false,
+			},
+		},
+		Violations: []*orchestrator.Violation{
+			{
+				CheckID:  "test",
+				Severity: config.SeverityError,
+				Command:  "go test ./...",
+				TriggeredPrompts: []*orchestrator.TriggeredPrompt{
+					{
+						Event:   "failure",
+						Source:  "test-generator",
+						Content: "Generate comprehensive unit tests for the failing code.",
+					},
+				},
+			},
+		},
+		ExitCode: 1,
+	}
+
+	err := FormatJSON(&buf, result)
+	if err != nil {
+		t.Fatalf("FormatJSON failed: %v", err)
+	}
+
+	var output JSONOutput
+	if err := json.Unmarshal(buf.Bytes(), &output); err != nil {
+		t.Fatalf("failed to unmarshal output: %v", err)
+	}
+
+	v := output.Violations[0]
+	if len(v.TriggeredPrompts) != 1 {
+		t.Errorf("expected 1 triggered prompt, got %d", len(v.TriggeredPrompts))
+	}
+	if v.TriggeredPrompts[0].Source != "test-generator" {
+		t.Errorf("expected source 'test-generator', got %q", v.TriggeredPrompts[0].Source)
+	}
+}
+
+func TestFormatJSON_WithTriggeredPrompts_EmptyArray(t *testing.T) {
+	var buf bytes.Buffer
+
+	result := &orchestrator.RunResult{
+		Results: []*orchestrator.CheckResult{
+			{
+				Check:     &config.Check{ID: "lint", Severity: config.SeverityError},
+				Execution: &executor.Result{Duration: 300 * time.Millisecond},
+				Passed:    false,
+			},
+		},
+		Violations: []*orchestrator.Violation{
+			{
+				CheckID:          "lint",
+				Severity:         config.SeverityError,
+				Command:          "golangci-lint run ./...",
+				TriggeredPrompts: []*orchestrator.TriggeredPrompt{}, // Empty
+			},
+		},
+		ExitCode: 1,
+	}
+
+	err := FormatJSON(&buf, result)
+	if err != nil {
+		t.Fatalf("FormatJSON failed: %v", err)
+	}
+
+	var output JSONOutput
+	if err := json.Unmarshal(buf.Bytes(), &output); err != nil {
+		t.Fatalf("failed to unmarshal output: %v", err)
+	}
+
+	v := output.Violations[0]
+	// Empty array should be omitted or nil due to omitempty tag
+	if len(v.TriggeredPrompts) > 0 {
+		t.Errorf("expected empty or nil triggered prompts, got %d", len(v.TriggeredPrompts))
+	}
+}
+
+func TestFormatJSON_WithTriggeredPrompts_DifferentEvents(t *testing.T) {
+	var buf bytes.Buffer
+
+	result := &orchestrator.RunResult{
+		Results: []*orchestrator.CheckResult{
+			{
+				Check:     &config.Check{ID: "fmt", Severity: config.SeverityError},
+				Execution: &executor.Result{Duration: 100 * time.Millisecond},
+				Passed:    false,
+			},
+		},
+		Violations: []*orchestrator.Violation{
+			{
+				CheckID:  "fmt",
+				Severity: config.SeverityError,
+				Command:  "go fmt ./...",
+				Timedout: true,
+				TriggeredPrompts: []*orchestrator.TriggeredPrompt{
+					{
+						Event:   "timeout",
+						Source:  "inline",
+						Content: "Formatting check timed out. Check for hanging processes.",
+					},
+				},
+			},
+		},
+		ExitCode: 1,
+	}
+
+	err := FormatJSON(&buf, result)
+	if err != nil {
+		t.Fatalf("FormatJSON failed: %v", err)
+	}
+
+	var output JSONOutput
+	if err := json.Unmarshal(buf.Bytes(), &output); err != nil {
+		t.Fatalf("failed to unmarshal output: %v", err)
+	}
+
+	v := output.Violations[0]
+	if len(v.TriggeredPrompts) != 1 {
+		t.Errorf("expected 1 triggered prompt, got %d", len(v.TriggeredPrompts))
+	}
+	if v.TriggeredPrompts[0].Event != "timeout" {
+		t.Errorf("expected event 'timeout', got %q", v.TriggeredPrompts[0].Event)
+	}
+}

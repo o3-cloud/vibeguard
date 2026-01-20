@@ -60,6 +60,10 @@ func (f *Formatter) formatVerbose(result *orchestrator.RunResult) {
 			if len(r.Check.Tags) > 0 {
 				_, _ = fmt.Fprintf(f.out, "  Tags: %s\n", strings.Join(r.Check.Tags, ", "))
 			}
+			if len(r.TriggeredPrompts) > 0 {
+				_, _ = fmt.Fprintln(f.out)
+				f.formatTriggeredPrompts(r.TriggeredPrompts)
+			}
 		} else if r.Execution.Cancelled {
 			_, _ = fmt.Fprintf(f.out, "⊘ %-15s cancelled\n", r.Check.ID)
 		} else {
@@ -165,6 +169,12 @@ func (f *Formatter) formatViolation(v *orchestrator.Violation) {
 		_, _ = fmt.Fprintf(f.out, "  Log: %s\n", v.LogFile)
 	}
 
+	// Show triggered prompts if present
+	if len(v.TriggeredPrompts) > 0 {
+		_, _ = fmt.Fprintln(f.out)
+		f.formatTriggeredPrompts(v.TriggeredPrompts)
+	}
+
 	// Show advisory line
 	advisory := "blocks commit"
 	if v.Severity == config.SeverityWarning {
@@ -173,6 +183,35 @@ func (f *Formatter) formatViolation(v *orchestrator.Violation) {
 	_, _ = fmt.Fprintf(f.out, "  Advisory: %s\n", advisory)
 
 	_, _ = fmt.Fprintln(f.out)
+}
+
+// formatTriggeredPrompts outputs triggered prompts in a formatted list.
+func (f *Formatter) formatTriggeredPrompts(prompts []*orchestrator.TriggeredPrompt) {
+	if len(prompts) == 0 {
+		return
+	}
+
+	// Get the event type from the first prompt (all should be the same)
+	eventType := prompts[0].Event
+
+	_, _ = fmt.Fprintf(f.out, "  Triggered Prompts (%s):\n", eventType)
+
+	for i, p := range prompts {
+		// Format source: either prompt ID or "(inline)" for inline content
+		source := p.Source
+		if source == "inline" {
+			source = "(inline)"
+		}
+
+		// Print the prompt header with number and source
+		_, _ = fmt.Fprintf(f.out, "  [%d] %s:\n", i+1, source)
+
+		// Split content by newlines and indent each line
+		lines := strings.Split(p.Content, "\n")
+		for _, line := range lines {
+			_, _ = fmt.Fprintf(f.out, "      %s\n", line)
+		}
+	}
 }
 
 // truncateCommand shortens long commands for display.
